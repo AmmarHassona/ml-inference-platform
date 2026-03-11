@@ -1,12 +1,19 @@
-from fastapi import FastAPI
+from fastapi import FastAPI, Request
 from pydantic import BaseModel
 import onnxruntime as ort
 import numpy as np
 
-app = FastAPI()
+from contextlib import asynccontextmanager
 
-# load model once at startup
-session = ort.InferenceSession("model_artifacts/model_v1.onnx")
+from app.config import MODEL_PATH
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    # load model once at startup
+    app.state.session = ort.InferenceSession(str(MODEL_PATH))
+    yield
+
+app = FastAPI(lifespan = lifespan)
 
 class InferenceRequest(BaseModel):
     features:  list[float]
@@ -16,8 +23,9 @@ def health():
     return {"status": "ok"}
 
 @app.post("/predict")
-def predict(request: InferenceRequest):
-    features = np.array(request.features, dtype = np.float32).reshape(1, -1)
+def predict(request: Request, body: InferenceRequest):
+    session = request.app.state.session
+    features = np.array(body.features, dtype = np.float32).reshape(1, -1)
     input_name = session.get_inputs()[0].name
     outputs = session.run(None, {input_name: features})
     prediction = int(outputs[0][0])
