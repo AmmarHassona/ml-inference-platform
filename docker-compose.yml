@@ -1,0 +1,52 @@
+services:
+  api:
+    build: .
+    ports:
+      - "8000:8000"
+    volumes:
+      - ./model_artifacts:/app/model_artifacts
+    depends_on:
+      redis:
+        condition: service_healthy
+    networks:
+      - mlplatform # change name later on
+  
+  prometheus:
+    image: prom/prometheus:latest
+    ports:
+      - "9090:9090"
+    volumes:
+      - ./prometheus/prometheus.yml:/etc/prometheus/prometheus.yml
+    networks:
+      - mlplatform # change name later on
+    healthcheck:
+      test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://localhost:9090/-/healthy"]
+      interval: 20s
+      timeout: 10s
+      retries: 3
+  
+  grafana:
+    image: grafana/grafana:latest
+    ports:
+      - "3000:3000"
+    depends_on:
+      prometheus:
+        condition: service_healthy
+    networks:
+      - mlplatform # change name later on
+  
+  redis:
+    image: redis:7-alpine
+    ports: 
+      - "6379:6379"
+    networks:
+      - mlplatform # change name later on
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+  
+networks:
+  mlplatform:
+    driver: bridge
