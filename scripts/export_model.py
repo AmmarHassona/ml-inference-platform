@@ -41,7 +41,7 @@ onnx_model_gb = convert_sklearn(gb_clf, initial_types = initial_type)
 
 # save model onnx
 with open("model_artifacts/model_v1.onnx", "wb") as f:
-    f.write(onnx_model_gb.SerializeToString())
+    f.write(onnx_model_rf.SerializeToString())
 
 with open("model_artifacts/model_v2.onnx", "wb") as f:
     f.write(onnx_model_gb.SerializeToString())

@@ -34,6 +34,9 @@ services:
         condition: service_healthy
     networks:
       - mlplatform # change name later on
+    volumes:
+      - grafana_data:/var/lib/grafana
+      - ./grafana/provisioning:/etc/grafana/provisioning
   
   redis:
     image: redis:7-alpine
@@ -50,3 +53,6 @@ services:
 networks:
   mlplatform:
     driver: bridge
+
+volumes:
+  grafana_data:

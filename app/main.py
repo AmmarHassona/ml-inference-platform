@@ -3,16 +3,27 @@ from pydantic import BaseModel
 import onnxruntime as ort
 import numpy as np
 import time
-from app.config import MODEL_PATH
-from app.metrics import PREDICTION_COUNTER, PREDICTION_LATENCY, PREDICTION_PROBABILITY
-
+import threading
 from contextlib import asynccontextmanager
 from prometheus_fastapi_instrumentator import Instrumentator
+from app.config import MODEL_PATH
+from app.metrics import PREDICTION_COUNTER, PREDICTION_LATENCY, PREDICTION_PROBABILITY
+from app.services.drift import record_features, run_drift_check, initialize_drift
+
+def start_drift_scheduler():
+    def loop():
+        while True:
+            time.sleep(60)
+            run_drift_check()
+    thread = threading.Thread(target = loop, daemon = True)
+    thread.start()
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     # load model once at startup
     app.state.session = ort.InferenceSession(str(MODEL_PATH))
+    initialize_drift()
+    start_drift_scheduler()
     yield
 
 app = FastAPI(lifespan = lifespan)
@@ -30,6 +41,7 @@ def health():
 def predict(request: Request, body: InferenceRequest):
     session = request.app.state.session
     features = np.array(body.features, dtype = np.float32).reshape(1, -1)
+    record_features(body.features)
     input_name = session.get_inputs()[0].name
     t0 = time.perf_counter()
     outputs = session.run(None, {input_name: features})

@@ -1,4 +1,4 @@
-from prometheus_client import Counter, Histogram
+from prometheus_client import Counter, Histogram, Gauge
 
 PREDICTION_COUNTER = Counter(
     "ml_predictions_total", 
@@ -18,4 +18,10 @@ PREDICTION_PROBABILITY = Histogram(
     "Distribution of max prediction probability",
     ["model_version"],
     buckets = [0.0, 0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 1.0]
+)
+
+PSI_SCORE = Gauge(
+    "ml_psi_score",
+    "PSI drift score per feature",
+    ["feature_name"]
 )
