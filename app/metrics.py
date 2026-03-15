@@ -25,3 +25,8 @@ PSI_SCORE = Gauge(
     "PSI drift score per feature",
     ["feature_name"]
 )
+
+SHADOW_DIVERGENCE = Gauge(
+    "ml_shadow_divergence",
+    "Divergence rate between v1 and v2 predictions"
+)

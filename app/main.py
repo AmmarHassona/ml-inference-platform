@@ -1,4 +1,4 @@
-from fastapi import FastAPI, Request
+from fastapi import FastAPI, Request, BackgroundTasks
 from pydantic import BaseModel
 import onnxruntime as ort
 import numpy as np
@@ -6,9 +6,10 @@ import time
 import threading
 from contextlib import asynccontextmanager
 from prometheus_fastapi_instrumentator import Instrumentator
-from app.config import MODEL_PATH
+from app.config import MODEL_PATH, SHADOW_MODEL_PATH
 from app.metrics import PREDICTION_COUNTER, PREDICTION_LATENCY, PREDICTION_PROBABILITY
 from app.services.drift import record_features, run_drift_check, initialize_drift
+from app.services.shadow import run_shadow_inference
 
 def start_drift_scheduler():
     def loop():
@@ -21,7 +22,8 @@ def start_drift_scheduler():
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     # load model once at startup
-    app.state.session = ort.InferenceSession(str(MODEL_PATH))
+    app.state.session_v1 = ort.InferenceSession(str(MODEL_PATH))
+    app.state.session_v2 = ort.InferenceSession(str(SHADOW_MODEL_PATH))
     initialize_drift()
     start_drift_scheduler()
     yield
@@ -38,8 +40,8 @@ def health():
     return {"status": "ok"}
 
 @app.post("/predict")
-def predict(request: Request, body: InferenceRequest):
-    session = request.app.state.session
+async def predict(request: Request, body: InferenceRequest, background_tasks: BackgroundTasks):
+    session = request.app.state.session_v1
     features = np.array(body.features, dtype = np.float32).reshape(1, -1)
     record_features(body.features)
     input_name = session.get_inputs()[0].name
@@ -53,6 +55,8 @@ def predict(request: Request, body: InferenceRequest):
     prob_dict = outputs[1][0]
     probabilities = [float(prob_dict[i]) for i in sorted(prob_dict.keys())]
     PREDICTION_PROBABILITY.labels(model_version = "v1").observe(max(probabilities))
+
+    background_tasks.add_task(run_shadow_inference, features, prediction, request.app.state)
     
     return {
         "prediction": prediction,
