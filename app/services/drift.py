@@ -45,14 +45,11 @@ def calculate_psi(current_features: np.ndarray) -> dict:
 
 
 def run_drift_check():
-    print(f"Drift check running, window size: {len(feature_window)}", flush=True)
     if len(feature_window) < 50:
-        print("Not enough data, skipping", flush=True)
         return
     with _lock:
         current = np.array(list(feature_window))
     scores = calculate_psi(current)
     for feature_name, score in scores.items():
         PSI_SCORE.labels(feature_name=feature_name).set(score)
-        print(f"PSI {feature_name}: {score}", flush=True)
     return scores

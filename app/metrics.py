@@ -30,3 +30,8 @@ SHADOW_DIVERGENCE = Gauge(
     "ml_shadow_divergence",
     "Divergence rate between v1 and v2 predictions"
 )
+
+ROLLBACK_COUNTER = Counter(
+    "ml_rollback_total",
+    "Number of automatic rollbacks triggered"
+)
