@@ -2,22 +2,21 @@ import threading
 import numpy as np
 import pandas as pd
 from collections import deque
-from app.config import REFERENCE_FEATURES_PATH
+from app.config import REFERENCE_FEATURES_PATH, PSI_WINDOW_SIZE, PSI_MIN_SAMPLES, PSI_N_BINS
 from app.metrics import PSI_SCORE
 
 reference_features = None
 bin_edges_per_feature = []
 ref_pcts = []
 
-WINDOW_SIZE = 500
-feature_window = deque(maxlen=WINDOW_SIZE)
+feature_window = deque(maxlen=PSI_WINDOW_SIZE)
 _lock = threading.Lock()
 
 
 def initialize_drift():
     global reference_features, bin_edges_per_feature, ref_pcts
     reference_features = np.load(str(REFERENCE_FEATURES_PATH))
-    n_bins = 5
+    n_bins = PSI_N_BINS
     for i in range(reference_features.shape[1]):
         _, edges = pd.qcut(reference_features[:, i], n_bins, retbins=True, duplicates="drop")
         edges[0] = -np.inf
@@ -45,7 +44,7 @@ def calculate_psi(current_features: np.ndarray) -> dict:
 
 
 def run_drift_check():
-    if len(feature_window) < 50:
+    if len(feature_window) < PSI_MIN_SAMPLES:
         return
     with _lock:
         current = np.array(list(feature_window))

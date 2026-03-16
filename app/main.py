@@ -6,21 +6,25 @@ import time
 import threading
 from contextlib import asynccontextmanager
 from prometheus_fastapi_instrumentator import Instrumentator
-from app.config import MODEL_PATH, SHADOW_MODEL_PATH, MINI_LM_PATH
+from app.config import MODEL_PATH, SHADOW_MODEL_PATH, MINI_LM_PATH, DRIFT_CHECK_INTERVAL
 from app.metrics import PREDICTION_COUNTER, PREDICTION_LATENCY, PREDICTION_PROBABILITY
 from app.services.drift import record_features, run_drift_check, initialize_drift
 from app.services.shadow import run_shadow_inference
 from app.services.router import get_active_model, run_rollback_check
 from app.services.embedding_drift import compute_embedding_drift, record_embedding
 from transformers import AutoTokenizer
+import logging
 
 def start_drift_scheduler():
     def loop():
         while True:
-            time.sleep(60)
-            run_drift_check()
-            run_rollback_check()
-            compute_embedding_drift()
+            time.sleep(DRIFT_CHECK_INTERVAL)
+            try:
+                run_drift_check()
+                run_rollback_check()
+                compute_embedding_drift()
+            except Exception as e:
+                logging.error(f"Scheduler error: {e}", exc_info=True)
     thread = threading.Thread(target = loop, daemon = True)
     thread.start()
 

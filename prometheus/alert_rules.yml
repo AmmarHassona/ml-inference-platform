@@ -29,7 +29,7 @@ groups:
           description: "P95 latency is {{ $value | humanizeDuration }}. Investigate slow requests or model degradation."
 
       - alert: HighErrorRate
-        expr: rate(http_requests_total{status=~"5.."}[5m]) / rate(http_requests_total[5m]) > 0.05
+        expr: rate(http_requests_total{status="5xx"}[5m]) / rate(http_requests_total[5m]) > 0.05
         for: 1m
         labels:
           severity: critical

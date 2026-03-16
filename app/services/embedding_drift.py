@@ -1,32 +1,40 @@
 import numpy as np
 from collections import deque
 from app.metrics import EMBEDDING_DRIFT_SCORE
+from app.config import EMBEDDING_REFERENCE_SIZE, EMBEDDING_BUFFER_SIZE, EMBEDDING_MIN_SAMPLES
+import logging
+import threading
 
-REFERENCE_SIZE = 50
 _reference_embeddings = []
 _reference_locked = False
-_embedding_window = deque(maxlen=200)
+_embedding_window = deque(maxlen=EMBEDDING_BUFFER_SIZE)
+
+_lock = threading.Lock()
 
 def record_embedding(embedding: list[float]):
     global _reference_locked
     emb = np.array(embedding)
-    if not _reference_locked:
-        _reference_embeddings.append(emb)
-        if len(_reference_embeddings) >= REFERENCE_SIZE:
-            _reference_locked = True
-        return
-    _embedding_window.append(emb)
+    with _lock:
+        if not _reference_locked:
+            _reference_embeddings.append(emb)
+            if len(_reference_embeddings) >= EMBEDDING_REFERENCE_SIZE:
+                _reference_locked = True
+            return
+        _embedding_window.append(emb)
 
 def cosine_similarity(a: np.ndarray, b: np.ndarray) -> float:
     return float(np.dot(a, b) / (np.linalg.norm(a) * np.linalg.norm(b)))
 
 def compute_embedding_drift():
-    if not _reference_locked or len(_embedding_window) < 10:
-        return
+    with _lock:
+        if not _reference_locked or len(_embedding_window) < EMBEDDING_MIN_SAMPLES:
+            return
+        window_snapshot = list(_embedding_window)
+        reference_snapshot = list(_reference_embeddings)
+    
     similarities = []
-    for emb in _embedding_window:
-        sims = [cosine_similarity(emb, ref) for ref in _reference_embeddings]
+    for emb in window_snapshot:
+        sims = [cosine_similarity(emb, ref) for ref in reference_snapshot]
         similarities.append(np.mean(sims))
     drift_score = 1.0 - float(np.mean(similarities))
     EMBEDDING_DRIFT_SCORE.set(drift_score)
-    print(f"Embedding drift score: {drift_score:.4f}", flush=True)

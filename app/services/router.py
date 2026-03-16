@@ -1,10 +1,10 @@
 import random
 from app.metrics import ROLLBACK_COUNTER
+from app.config import CANARY_PERCENT, DIVERGENCE_THRESHOLD
+import logging
 
 _current_divergence = 0.0
-active_model = "v1"
-canary_percent = 10
-DIVERGENCE_THRESHOLD = 0.15
+canary_percent = CANARY_PERCENT
 
 def get_active_model() -> str:
     if random.random() * 100 < canary_percent:
@@ -15,7 +15,7 @@ def get_active_model() -> str:
 def trigger_rollback():
     global canary_percent
     canary_percent = 0
-    print("ROLLBACK TRIGGERED: routing all traffic to v1", flush = True)
+    logging.warning("ROLLBACK TRIGGERED: routing all traffic to v1")
     ROLLBACK_COUNTER.inc(1)
 
 def update_divergence(value: float):

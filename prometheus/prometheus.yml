@@ -6,7 +6,7 @@ rule_files:
   - "alert_rules.yml"
 
 scrape_configs:
-  - job_name: 'ml-inference-api' # change name later on 
+  - job_name: 'ml-inference-api'
     static_configs:
       - targets: ['api:8000']
     metrics_path: /metrics

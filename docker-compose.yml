@@ -9,7 +9,13 @@ services:
       redis:
         condition: service_healthy
     networks:
-      - mlplatform # change name later on
+      - mlplatform
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+    restart: unless-stopped
   
   prometheus:
     image: prom/prometheus:latest
@@ -19,12 +25,13 @@ services:
       - ./prometheus/prometheus.yml:/etc/prometheus/prometheus.yml
       - ./prometheus/alert_rules.yml:/etc/prometheus/alert_rules.yml
     networks:
-      - mlplatform # change name later on
+      - mlplatform
     healthcheck:
       test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://localhost:9090/-/healthy"]
       interval: 20s
       timeout: 10s
       retries: 3
+    restart: unless-stopped
   
   grafana:
     image: grafana/grafana:latest
@@ -34,22 +41,24 @@ services:
       prometheus:
         condition: service_healthy
     networks:
-      - mlplatform # change name later on
+      - mlplatform
     volumes:
       - grafana_data:/var/lib/grafana
       - ./grafana/provisioning:/etc/grafana/provisioning
+    restart: unless-stopped
   
-  redis:
+  redis: # reserved for future async job queue
     image: redis:7-alpine
     ports: 
       - "6379:6379"
     networks:
-      - mlplatform # change name later on
+      - mlplatform
     healthcheck:
       test: ["CMD", "redis-cli", "ping"]
       interval: 10s
       timeout: 5s
       retries: 3
+    restart: unless-stopped
   
 networks:
   mlplatform:
