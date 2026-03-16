@@ -1,0 +1,38 @@
+groups:
+  - name: ml_platform_alerts
+    rules:
+      - alert: PSIDrift
+        expr: ml_psi_score > 0.2
+        for: 2m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Feature drift detected"
+          description: "PSI score for {{ $labels.feature_name }} is {{ $value | humanize }}, threshold is 0.2. Input distribution has shifted from training data."
+
+      - alert: EmbeddingDrift
+        expr: ml_embedding_drift_score > 0.3
+        for: 2m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Embedding drift detected"
+          description: "Embedding drift score is {{ $value | humanize }}, threshold is 0.3. Incoming text distribution has shifted from reference embeddings."
+
+      - alert: HighP95Latency
+        expr: histogram_quantile(0.95, rate(http_request_duration_seconds_bucket[5m])) > 0.2
+        for: 1m
+        labels:
+          severity: warning
+        annotations:
+          summary: "P95 latency exceeds 200ms SLO"
+          description: "P95 latency is {{ $value | humanizeDuration }}. Investigate slow requests or model degradation."
+
+      - alert: HighErrorRate
+        expr: rate(http_requests_total{status=~"5.."}[5m]) / rate(http_requests_total[5m]) > 0.05
+        for: 1m
+        labels:
+          severity: critical
+        annotations:
+          summary: "Error rate exceeds 5% threshold"
+          description: "Error rate is {{ $value | humanizePercentage }} over the last 5 minutes."
