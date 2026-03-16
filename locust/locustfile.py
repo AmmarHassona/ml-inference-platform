@@ -4,7 +4,7 @@ import random
 class PredictionUser(HttpUser):
     wait_time = between(0.5, 2)
 
-    @task
+    @task(2)
     def predict(self):
         self.client.post("/predict",
             json={
@@ -16,3 +16,7 @@ class PredictionUser(HttpUser):
                 ]
             }
         )
+    
+    @task(1)
+    def predict_text(self):
+        self.client.post("/predict/text", json = {"text": "If you're reading this, have a nice day :)"})

@@ -18,6 +18,6 @@ async def run_shadow_inference(features: np.ndarray, v1_prediction: int, app_sta
         if len(_comparison_buffer) >= 20:
             divergence = sum(v1 != v2 for v1, v2 in _comparison_buffer) / len(_comparison_buffer)
             SHADOW_DIVERGENCE.set(divergence)
-        update_divergence(divergence)
+            update_divergence(divergence)
     except Exception as e:
         print(f"Shadow inference failed: {e}", flush = True)

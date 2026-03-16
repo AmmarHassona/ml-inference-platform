@@ -6,6 +6,7 @@ __pycache__/
 # Model artifacts
 model_artifacts/*.onnx
 model_artifacts/*.npy
+model_artifacts/minilm/
 
 # Environment
 .env

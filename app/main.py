@@ -6,11 +6,13 @@ import time
 import threading
 from contextlib import asynccontextmanager
 from prometheus_fastapi_instrumentator import Instrumentator
-from app.config import MODEL_PATH, SHADOW_MODEL_PATH
+from app.config import MODEL_PATH, SHADOW_MODEL_PATH, MINI_LM_PATH
 from app.metrics import PREDICTION_COUNTER, PREDICTION_LATENCY, PREDICTION_PROBABILITY
 from app.services.drift import record_features, run_drift_check, initialize_drift
 from app.services.shadow import run_shadow_inference
 from app.services.router import get_active_model, run_rollback_check
+from app.services.embedding_drift import compute_embedding_drift, record_embedding
+from transformers import AutoTokenizer
 
 def start_drift_scheduler():
     def loop():
@@ -18,14 +20,17 @@ def start_drift_scheduler():
             time.sleep(60)
             run_drift_check()
             run_rollback_check()
+            compute_embedding_drift()
     thread = threading.Thread(target = loop, daemon = True)
     thread.start()
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    # load model once at startup
+    # load models once at startup
     app.state.session_v1 = ort.InferenceSession(str(MODEL_PATH))
     app.state.session_v2 = ort.InferenceSession(str(SHADOW_MODEL_PATH))
+    app.state.minilm_session = ort.InferenceSession(str(MINI_LM_PATH / "model.onnx"))
+    app.state.minilm_tokenizer = AutoTokenizer.from_pretrained(str(MINI_LM_PATH))
     initialize_drift()
     start_drift_scheduler()
     yield
@@ -36,6 +41,9 @@ Instrumentator().instrument(app).expose(app)
 
 class InferenceRequest(BaseModel):
     features:  list[float]
+
+class TextRequest(BaseModel):
+    text: str
 
 @app.get("/health")
 def health():
@@ -65,4 +73,40 @@ async def predict(request: Request, body: InferenceRequest, background_tasks: Ba
     return {
         "prediction": prediction,
         "probabilities": probabilities
+    }
+
+@app.post("/predict/text")
+async def predict_text(request: Request, body: TextRequest):
+    session = request.app.state.minilm_session
+    tokenizer = request.app.state.minilm_tokenizer
+    sentences = body.text
+    
+    inputs = tokenizer(
+        sentences,
+        padding = True,
+        truncation = True,
+        return_tensors = "np",
+    )
+
+    outputs = session.run(None, {
+        "input_ids": inputs["input_ids"],
+        "attention_mask": inputs["attention_mask"],
+        "token_type_ids": inputs.get("token_type_ids", np.zeros_like(inputs["input_ids"]))
+    })
+
+    # mean pooling with numpy
+    token_embeddings = outputs[0]  # shape (1, seq_len, 384)
+    attention_mask = inputs["attention_mask"]  # shape (1, seq_len)
+    mask_expanded = attention_mask[:, :, np.newaxis].astype(np.float32)
+    embedding = (token_embeddings * mask_expanded).sum(axis = 1) / mask_expanded.sum(axis = 1).clip(min = 1e-9)
+
+    # normalize
+    embedding = embedding / np.linalg.norm(embedding, axis = 1, keepdims = True)
+    embedding = embedding[0].tolist()  # flatten to list
+
+    record_embedding(embedding)
+
+    return {
+        "embedding": embedding,
+        "dimensions": len(embedding)
     }

@@ -35,3 +35,8 @@ ROLLBACK_COUNTER = Counter(
     "ml_rollback_total",
     "Number of automatic rollbacks triggered"
 )
+
+EMBEDDING_DRIFT_SCORE = Gauge(
+    "ml_embedding_drift_score",
+    "Cosine similarity drift score for text embeddings"
+)
