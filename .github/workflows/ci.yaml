@@ -16,6 +16,14 @@ jobs:
         with:
           python-version: '3.10'
       
+      - name: Cache pip dependencies
+        uses: actions/cache@v4
+        with: 
+          path: ~/.cache/uv
+          key: uv-${{ runner.os }}-${{ hashFiles('requirements.txt') }}
+          restore-keys: |
+            uv-${{ runner.os }}-
+      
       - name: Install uv
         run: pip install uv
 
@@ -39,6 +47,9 @@ jobs:
       - name: Wait for API
         run: sleep 30
       
+      - name: Show API logs
+        run: docker compose logs api
+
       - name: Health check
         run: curl -f http://localhost:8000/health
       
