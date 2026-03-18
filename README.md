@@ -5,6 +5,7 @@
 ![Docker](https://img.shields.io/badge/Docker-Compose-2496ED?logo=docker&logoColor=white)
 ![Prometheus](https://img.shields.io/badge/Prometheus-monitored-E6522C?logo=prometheus&logoColor=white)
 ![Grafana](https://img.shields.io/badge/Grafana-dashboard-F46800?logo=grafana&logoColor=white)
+![CI](https://github.com/ammarhassona/ml-inference-platform/actions/workflows/ci.yaml/badge.svg)
 
 A production-style ML inference platform built to explore ML systems engineering. Two ONNX models are served through a FastAPI app with observability, drift detection, shadow mode testing, canary routing, and automated rollback all running locally via Docker Compose. The models (Iris classifiers using RandomForest + GradientBoosting Classifiers and a MiniLM embedder) are intentionally simple. The main focus was the infrastructure and pipeline itself rather than the models.
 
@@ -56,6 +57,7 @@ Prometheus scrapes `/metrics` every 15 seconds. Seven custom metrics are exposed
 | Metrics | Prometheus + prometheus-fastapi-instrumentator |
 | Dashboards | Grafana (auto-provisioned) |
 | Containerisation | Docker Compose |
+| CI | GitHub Actions |
 | Load testing | Locust |
 | Cache / queue | Redis (provisioned, reserved for async job queue) |
 
@@ -338,11 +340,28 @@ ml-inference-platform/
 ├── scripts/
 │   ├── export_model.py        # Train and export tabular models to ONNX
 │   └── export_minilm.py       # Download and export MiniLM to ONNX
+├── .github/
+│   └── workflows/
+│       └── ci.yaml                # GitHub Actions CI pipeline
 ├── docker-compose.yml
 ├── Dockerfile
 ├── pyproject.toml
 └── requirements.txt
 ```
+
+---
+
+## CI Pipeline
+
+The project uses a GitHub Actions workflow (`.github/workflows/ci.yaml`) that runs on every push to `main`.
+
+The pipeline:
+1. Sets up Python 3.10 and installs dependencies via `uv`, with the uv package cache keyed on `requirements.txt`
+2. Exports the ONNX models by running both export scripts, with the HuggingFace model download cached across runs
+3. Builds the Docker image via BuildKit with layer caching, so only changed layers are rebuilt
+4. Starts the full stack with `docker compose up -d` and waits for the API to be ready
+5. Runs tests against `/health`, `/predict`, and `/predict/text`
+6. Tears down the stack unconditionally on completion
 
 ---
 
