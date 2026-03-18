@@ -34,7 +34,7 @@ jobs:
           python scripts/export_minilm.py
       
       - name: Start stack
-        run: docker-compose up --build -d
+        run: docker compose up --build -d
       
       - name: Wait for API
         run: sleep 30
