@@ -1,7 +1,3 @@
-"""
-This serves as a test script that trains simple models using scikit-learn on the standard iris dataset. 
-"""
-
 from sklearn.ensemble import RandomForestClassifier, GradientBoostingClassifier
 from sklearn.datasets import load_iris
 from sklearn.model_selection import train_test_split

@@ -2,7 +2,9 @@ import random
 from app.metrics import ROLLBACK_COUNTER
 from app.config import CANARY_PERCENT, DIVERGENCE_THRESHOLD
 import logging
+import threading
 
+_divergence_lock = threading.Lock()
 _current_divergence = 0.0
 canary_percent = CANARY_PERCENT
 
@@ -20,8 +22,11 @@ def trigger_rollback():
 
 def update_divergence(value: float):
     global _current_divergence
-    _current_divergence = value
+    with _divergence_lock:
+        _current_divergence = value
 
 def run_rollback_check():
-    if _current_divergence > DIVERGENCE_THRESHOLD:
+    with _divergence_lock:
+        divergence = _current_divergence
+    if divergence > DIVERGENCE_THRESHOLD:
         trigger_rollback()

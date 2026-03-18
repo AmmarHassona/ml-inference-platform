@@ -17,3 +17,6 @@ model_artifacts/minilm/
 
 # macOS
 .DS_Store
+
+# Local
+notes.md

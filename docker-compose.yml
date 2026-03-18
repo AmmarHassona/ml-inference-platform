@@ -5,9 +5,6 @@ services:
       - "8000:8000"
     volumes:
       - ./model_artifacts:/app/model_artifacts
-    depends_on:
-      redis:
-        condition: service_healthy
     networks:
       - mlplatform
     healthcheck:
