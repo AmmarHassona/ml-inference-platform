@@ -68,7 +68,7 @@ async def predict(request: Request, body: InferenceRequest, background_tasks: Ba
 
     prediction = int(outputs[0][0])
     PREDICTION_COUNTER.labels(model_version = model_version).inc(1)
-    prob_dict = session.get_outputs()[1].name
+    prob_dict = outputs[1][0]
     probabilities = [float(prob_dict[i]) for i in sorted(prob_dict.keys())]
     PREDICTION_PROBABILITY.labels(model_version = model_version).observe(max(probabilities))
 

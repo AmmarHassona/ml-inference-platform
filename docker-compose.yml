@@ -1,6 +1,7 @@
 services:
   api:
     build: .
+    image: ml-inference-platform-api:latest
     ports:
       - "8000:8000"
     volumes:
