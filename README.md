@@ -17,7 +17,7 @@ The platform serves two inference endpoints backed by ONNX Runtime. The tabular 
 
 A background scheduler runs every 60 seconds and does three things: PSI drift detection on a rolling window of tabular features against the training distribution, cosine similarity drift detection on text embeddings against a reference set built from the first 50 requests, and a rollback check that reverts canary traffic if v1/v2 prediction divergence exceeds 15%.
 
-Prometheus scrapes `/metrics` every 15 seconds. Seven custom metrics are exposed alongside the auto-instrumented HTTP metrics from `prometheus-fastapi-instrumentator`. Grafana is provisioned automatically with a 9-panel dashboard. Four alert rules cover PSI drift, embedding drift, P95 latency, and error rate.
+Prometheus scrapes `/metrics` every 15 seconds. Seven custom metrics are exposed alongside the auto-instrumented HTTP metrics from `prometheus-fastapi-instrumentator`. Grafana is provisioned automatically with a 9-panel dashboard and two datasources (Prometheus and Loki). Four alert rules cover PSI drift, embedding drift, P95 latency, and error rate. All application logs are emitted as structured JSON via structlog, collected by Promtail, and stored in Loki which makes them queryable alongside metrics in Grafana.
 
 ```
                         ┌─────────────────────────────────────────┐
@@ -41,6 +41,14 @@ Prometheus scrapes `/metrics` every 15 seconds. Seven custom metrics are exposed
                                        │
                                        ▼
                                Grafana (port 3000)
+
+                        ┌─────────────────────────────────────────┐
+                        │         Log Pipeline                     │
+                        │                                          │
+  Container stdout ────►│  Promtail → Loki (port 3100)            │
+                        │                    │                     │
+                        │             Grafana Explore              │
+                        └─────────────────────────────────────────┘
 ```
 
 ---
@@ -55,6 +63,7 @@ Prometheus scrapes `/metrics` every 15 seconds. Seven custom metrics are exposed
 | Text model | sentence-transformers/all-MiniLM-L6-v2 via HuggingFace Optimum |
 | Model export | skl2onnx, HuggingFace Optimum |
 | Logging | structlog (JSON structured logging) |
+| Log aggregation | Grafana Loki + Promtail |
 | Metrics | Prometheus + prometheus-fastapi-instrumentator |
 | Dashboards | Grafana (auto-provisioned) |
 | Containerisation | Docker Compose |
@@ -73,6 +82,7 @@ Prometheus scrapes `/metrics` every 15 seconds. Seven custom metrics are exposed
 | Metrics | http://localhost:8000/metrics | Raw Prometheus metrics |
 | Prometheus | http://localhost:9090 | Query and alert state |
 | Grafana | http://localhost:3000 | Dashboard (admin / admin) |
+| Loki | http://localhost:3100 | Log aggregation backend |
 | Locust | http://localhost:8089 | Load test UI (run `locust -f locust/locustfile.py --host http://localhost:8000`) |
 
 ---
@@ -197,7 +207,7 @@ curl -X POST http://localhost:8000/predict/text \
 
 ## Monitoring and Observability
 
-Grafana is provisioned automatically with a datasource pointed at Prometheus and a 9-panel dashboard. Nothing to configure manually.
+Grafana is provisioned automatically with two datasources (Prometheus and Loki) and a 9-panel dashboard. Nothing to configure manually.
 
 | Panel | Metric | Description |
 |-------|--------|-------------|
@@ -237,6 +247,27 @@ Example log line:
 To view live logs from the running container:
 ```bash
 docker compose logs -f api
+```
+
+Logs are also ingested into Loki via Promtail and queryable in Grafana. Go to Grafana → Explore → select Loki datasource and run:
+
+```
+{container="/ml-inference-platform-api-1"} | json
+```
+
+Useful queries:
+```
+# warning and above only
+{container="/ml-inference-platform-api-1"} | json | level="warning"
+
+# rollback events only
+{container="/ml-inference-platform-api-1"} | json | event="rollback_triggered"
+
+# drift detections only
+{container="/ml-inference-platform-api-1"} | json | event="embedding_drift_detected"
+
+# PSI drift detections only
+{container="/ml-inference-platform-api-1"} | json | event="psi_drift_detected"
 ```
 
 ---
@@ -361,12 +392,14 @@ ml-inference-platform/
 ├── grafana/
 │   └── provisioning/
 │       ├── dashboards/        # Auto-provisioned dashboard JSON
-│       └── datasources/       # Auto-provisioned Prometheus datasource
+│       └── datasources/       # Auto-provisioned Prometheus and Loki datasources
 ├── locust/                    # Load test scenarios
 ├── model_artifacts/           # ONNX models and reference data (gitignored)
 ├── prometheus/
 │   ├── alert_rules.yml        # 4 alert rules
 │   └── prometheus.yml         # Scrape config
+├── promtail/
+│   └── promtail.yml           # Promtail config — scrapes Docker logs, ships to Loki
 ├── scripts/
 │   ├── export_model.py        # Train and export tabular models to ONNX
 │   └── export_minilm.py       # Download and export MiniLM to ONNX
@@ -392,8 +425,8 @@ The project uses a GitHub Actions workflow (`.github/workflows/ci.yaml`) that ru
 
 The pipeline:
 1. Sets up Python 3.10 and installs dependencies via `uv`, with the uv package cache keyed on `requirements.txt`
-2. Runs the pytest unit test suite (PSI drift, rollback boundary conditions, embedding drift, semantic search) — fails fast before any Docker work if logic is broken
-3. Exports the ONNX models by running both export scripts, with the HuggingFace model download cached across runs
+2. Exports the ONNX models by running both export scripts, with the HuggingFace model download cached across runs
+3. Runs the pytest unit test suite (PSI drift, rollback boundary conditions, embedding drift, semantic search) — fails fast before any Docker work if logic is broken
 4. Builds the Docker image via BuildKit with layer caching, so only changed layers are rebuilt
 5. Starts the full stack with `docker compose up -d` and waits for the API to be ready
 6. Runs smoke tests against `/health`, `/predict`, and `/predict/text`
@@ -404,8 +437,6 @@ The pipeline:
 ## What I Would Change
 
 The main thing I'd change is the dataset. Iris is convenient for getting the infrastructure off the ground, but models trained on it are too accurate (100% test accuracy) to produce realistic drift or divergence signals. The PSI alerts were triggered by manually injecting noisy data. A dataset with natural distribution shift over time, like credit scoring or sensor data, would make the drift and rollback mechanics far more interesting to watch.
-
-Logs are currently emitted as JSON to stdout only. The natural next step would be adding a log aggregation backend. Grafana Loki with Promtail can be used given Grafana is already in the stack. That would make logs queryable alongside metrics in the same dashboard, and enable alerts on log events like `rollback_triggered`.
 
 Redis was initially planned to be implemented but was then removed from the final implementation. The platform uses FastAPI BackgroundTasks for shadow inference and a daemon thread scheduler for periodic drift checks which is sufficient for a single-worker deployment. Redis would become necessary when scaling to multiple API workers, where background tasks can't share in-process state. At that point, Redis would serve as a job queue (via Celery or RQ) to distribute shadow inference and drift computation across workers without race conditions.
 
