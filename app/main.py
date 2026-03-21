@@ -12,6 +12,7 @@ from app.services.drift import record_features, run_drift_check, initialize_drif
 from app.services.shadow import run_shadow_inference
 from app.services.router import get_active_model, run_rollback_check
 from app.services.embedding_drift import compute_embedding_drift, record_embedding
+import app.services.semantic_search as semantic_search
 from transformers import AutoTokenizer
 from app.logger import setup_logging, get_logger
 
@@ -38,6 +39,7 @@ async def lifespan(app: FastAPI):
     app.state.session_v2 = ort.InferenceSession(str(SHADOW_MODEL_PATH))
     app.state.minilm_session = ort.InferenceSession(str(MINI_LM_PATH / "model.onnx"))
     app.state.minilm_tokenizer = AutoTokenizer.from_pretrained(str(MINI_LM_PATH))
+    semantic_search.load_corpus(app.state.minilm_session, app.state.minilm_tokenizer)
     initialize_drift()
     start_drift_scheduler()
     yield
@@ -87,33 +89,14 @@ async def predict_text(request: Request, body: TextRequest):
     session = request.app.state.minilm_session
     tokenizer = request.app.state.minilm_tokenizer
     sentences = body.text
-    
-    inputs = tokenizer(
-        sentences,
-        padding = True,
-        truncation = True,
-        return_tensors = "np",
-    )
 
-    outputs = session.run(None, {
-        "input_ids": inputs["input_ids"],
-        "attention_mask": inputs["attention_mask"],
-        "token_type_ids": inputs.get("token_type_ids", np.zeros_like(inputs["input_ids"]))
-    })
-
-    # mean pooling with numpy
-    token_embeddings = outputs[0]  # shape (1, seq_len, 384)
-    attention_mask = inputs["attention_mask"]  # shape (1, seq_len)
-    mask_expanded = attention_mask[:, :, np.newaxis].astype(np.float32)
-    embedding = (token_embeddings * mask_expanded).sum(axis = 1) / mask_expanded.sum(axis = 1).clip(min = 1e-9)
-
-    # normalize
-    embedding = embedding / np.linalg.norm(embedding, axis = 1, keepdims = True)
-    embedding = embedding[0].tolist()  # flatten to list
+    embedding = semantic_search.embed_text(sentences, session, tokenizer)
+    label, confidence, matched_document = semantic_search.find_nearest(embedding)
 
     record_embedding(embedding)
 
     return {
-        "embedding": embedding,
-        "dimensions": len(embedding)
+        "label": label,
+        "similarity": confidence,
+        "matched_document": matched_document
     }

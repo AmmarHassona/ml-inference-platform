@@ -13,7 +13,7 @@ A production-style ML inference platform built to explore ML systems engineering
 
 ## Architecture Overview
 
-The platform serves two inference endpoints backed by ONNX Runtime. The tabular endpoint (`/predict`) routes requests through a canary router that sends 10% of traffic to a shadow v2 model (GradientBoosting) while the remaining 90% goes to the stable v1 model (RandomForest). Both models run in the same process, loaded at startup. The text endpoint (`/predict/text`) runs `sentence-transformers/all-MiniLM-L6-v2` exported to ONNX via HuggingFace Optimum, performing mean-pooled, L2-normalised embedding inference entirely in NumPy without a PyTorch dependency at runtime.
+The platform serves two inference endpoints backed by ONNX Runtime. The tabular endpoint (`/predict`) routes requests through a canary router that sends 10% of traffic to a shadow v2 model (GradientBoosting) while the remaining 90% goes to the stable v1 model (RandomForest). Both models run in the same process, loaded at startup. The text endpoint (`/predict/text`) performs semantic search using `sentence-transformers/all-MiniLM-L6-v2` exported to ONNX via HuggingFace Optimum. At startup, a 24-sentence corpus across four topics (machine learning, sports, finance, health) is embedded and stored in memory. Incoming queries are embedded via mean-pooled, L2-normalised inference entirely in NumPy, then matched against the corpus by cosine similarity to return a topic label, confidence score, and matched document. Embeddings are recorded for drift monitoring.
 
 A background scheduler runs every 60 seconds and does three things: PSI drift detection on a rolling window of tabular features against the training distribution, cosine similarity drift detection on text embeddings against a reference set built from the first 50 requests, and a rollback check that reverts canary traffic if v1/v2 prediction divergence exceeds 15%.
 
@@ -28,7 +28,7 @@ Prometheus scrapes `/metrics` every 15 seconds. Seven custom metrics are exposed
                         │  ONNX v1 (RF)      ONNX v2 (GB)         │
                         │  [tabular]         [shadow mode]         │
                         │                                          │
-                        │  ONNX MiniLM (text embeddings)          │
+                        │  ONNX MiniLM (semantic search)          │
                         │                                          │
                         │  Background Scheduler (60s interval)     │
                         │  ├── PSI drift check                     │
@@ -54,13 +54,13 @@ Prometheus scrapes `/metrics` every 15 seconds. Seven custom metrics are exposed
 | Tabular models | scikit-learn (RandomForest, GradientBoosting) |
 | Text model | sentence-transformers/all-MiniLM-L6-v2 via HuggingFace Optimum |
 | Model export | skl2onnx, HuggingFace Optimum |
+| Logging | structlog (JSON structured logging) |
 | Metrics | Prometheus + prometheus-fastapi-instrumentator |
 | Dashboards | Grafana (auto-provisioned) |
 | Containerisation | Docker Compose |
 | CI | GitHub Actions |
 | Load testing | Locust |
 | Unit testing | pytest |
-| Cache / queue | Redis (provisioned, reserved for async job queue) |
 
 ---
 
@@ -177,18 +177,19 @@ curl -X POST http://localhost:8000/predict \
 
 ### `POST /predict/text`
 
-Text embedding inference. Accepts a string and returns a 384-dimensional L2-normalised sentence embedding produced by MiniLM via mean pooling over token embeddings. Embeddings are recorded for drift monitoring.
+Semantic search over an in-memory corpus of 24 labelled sentences across four topics: `machine_learning`, `sports`, `finance`, `health`. The query is embedded using MiniLM via mean pooling and L2 normalisation, then matched against the corpus by cosine similarity. Returns the closest topic label, confidence score, and the matched corpus sentence. Embeddings are recorded for drift monitoring. If the distribution of queries shifts (e.g. from ML to finance topics), the embedding drift score rises and an alert fires.
 
 ```bash
 curl -X POST http://localhost:8000/predict/text \
   -H "Content-Type: application/json" \
-  -d '{"text": "The model is performing well in production."}'
+  -d '{"text": "What is gradient descent?"}'
 ```
 
 ```json
 {
-  "embedding": [0.0421, -0.0183, 0.0734, "...381 more values"],
-  "dimensions": 384
+  "label": "machine_learning",
+  "similarity": 0.8523,
+  "matched_document": "Gradient descent is an optimization algorithm used to train models"
 }
 ```
 
@@ -209,6 +210,34 @@ Grafana is provisioned automatically with a datasource pointed at Prometheus and
 | Shadow Model Divergence | `ml_shadow_divergence` | Fraction of recent requests where v1 and v2 disagreed. Rollback triggers at 0.15. |
 | Embedding Drift Score | `ml_embedding_drift_score` | Mean cosine distance between current embeddings and the reference window. Threshold at 0.3. |
 | Text Request Rate | `http_requests_total` | Requests per second filtered to `/predict/text`. |
+
+---
+
+## Structured Logging
+
+All application logs are emitted as JSON via `structlog`, making them queryable by tools like Grafana Loki, Datadog, or `jq`. Each log line includes a timestamp, level, and structured fields — no plain string messages.
+
+| Event | Level | Key Fields |
+|-------|-------|-----------|
+| `rollback_triggered` | warning | `divergence`, `canary_percent_before`, `canary_percent_after` |
+| `shadow_divergence_updated` | info | `divergence`, `buffer_size` |
+| `shadow_inference_failed` | warning | `error` |
+| `psi_drift_detected` | warning | `feature`, `psi_score` |
+| `psi_check` | info | `feature`, `psi_score` |
+| `embedding_reference_locked` | info | `reference_size` |
+| `embedding_drift_detected` | warning | `drift_score`, `window_size` |
+| `embedding_drift_check` | info | `drift_score`, `window_size` |
+| `scheduler_error` | error | `error` |
+
+Example log line:
+```json
+{"log_level": "warning", "timestamp": "2026-03-21T14:32:01Z", "event": "rollback_triggered", "divergence": 0.16, "canary_percent_before": 10.0, "canary_percent_after": 0}
+```
+
+To view live logs from the running container:
+```bash
+docker compose logs -f api
+```
 
 ---
 
@@ -242,9 +271,7 @@ The first 50 text requests build a reference embedding set. Subsequent embedding
 
 ## Shadow Mode and Canary Deployment
 
-**Shadow mode:** every `/predict` request triggers a background task that runs the same features through the v2 model (GradientBoosting). The v2 result is never returned to the caller, it is only used to update the divergence metric. This lets v2 be evaluated against real production traffic with zero user impact. 
-
-*Note:* Redis is configured in docker-compose.yml and reserved for future use. In the current implementation, async jobs (shadow inference, drift recording) are handled via FastAPI BackgroundTasks and a daemon thread scheduler. Redis would be the natural next step for distributing these jobs across multiple API workers in a production deployment.
+**Shadow mode:** every `/predict` request triggers a background task that runs the same features through the v2 model (GradientBoosting). The v2 result is never returned to the caller, it is only used to update the divergence metric. This lets v2 be evaluated against real production traffic with zero user impact. Async jobs (shadow inference, drift recording) are handled via FastAPI BackgroundTasks and a daemon thread scheduler.
 
 **Canary routing:** 10% of `/predict` traffic is actively served by v2. The `get_active_model()` function draws a uniform random number; if it falls below the canary percentage, the request is served by v2 and the response is returned to the user.
 
@@ -320,6 +347,7 @@ ml-inference-platform/
 ├── app/
 │   ├── __init__.py
 │   ├── config.py              # All tunable constants (thresholds, window sizes)
+│   ├── logger.py              # structlog configuration and get_logger helper
 │   ├── main.py                # FastAPI app, endpoints, scheduler
 │   ├── metrics.py             # Prometheus metric definitions
 │   └── services/
@@ -327,6 +355,7 @@ ml-inference-platform/
 │       ├── drift.py           # PSI computation and feature window
 │       ├── embedding_drift.py # Cosine similarity drift for text
 │       ├── router.py          # Canary routing and rollback logic
+│       ├── semantic_search.py # Corpus embedding, nearest-neighbour search
 │       └── shadow.py          # Shadow v2 inference and divergence tracking
 ├── docs/                      # Screenshots: load tests, drift incidents, alerts
 ├── grafana/
@@ -342,9 +371,10 @@ ml-inference-platform/
 │   ├── export_model.py        # Train and export tabular models to ONNX
 │   └── export_minilm.py       # Download and export MiniLM to ONNX
 ├── tests/
-│   ├── test_drift.py          # PSI calculation correctness tests
-│   ├── test_router.py         # Canary rollback boundary condition tests
-│   └── test_embedding_drift.py # Embedding reference locking and drift score tests
+│   ├── test_drift.py           # PSI calculation correctness tests
+│   ├── test_router.py          # Canary rollback boundary condition tests
+│   ├── test_embedding_drift.py # Embedding reference locking and drift score tests
+│   └── test_semantic_search.py # Nearest-neighbour label classification tests
 ├── .github/
 │   └── workflows/
 │       └── ci.yaml                # GitHub Actions CI pipeline
@@ -362,7 +392,7 @@ The project uses a GitHub Actions workflow (`.github/workflows/ci.yaml`) that ru
 
 The pipeline:
 1. Sets up Python 3.10 and installs dependencies via `uv`, with the uv package cache keyed on `requirements.txt`
-2. Runs the pytest unit test suite (PSI drift, rollback boundary conditions, embedding drift) — fails fast before any Docker work if logic is broken
+2. Runs the pytest unit test suite (PSI drift, rollback boundary conditions, embedding drift, semantic search) — fails fast before any Docker work if logic is broken
 3. Exports the ONNX models by running both export scripts, with the HuggingFace model download cached across runs
 4. Builds the Docker image via BuildKit with layer caching, so only changed layers are rebuilt
 5. Starts the full stack with `docker compose up -d` and waits for the API to be ready
@@ -374,5 +404,9 @@ The pipeline:
 ## What I Would Change
 
 The main thing I'd change is the dataset. Iris is convenient for getting the infrastructure off the ground, but models trained on it are too accurate (100% test accuracy) to produce realistic drift or divergence signals. The PSI alerts were triggered by manually injecting noisy data. A dataset with natural distribution shift over time, like credit scoring or sensor data, would make the drift and rollback mechanics far more interesting to watch.
+
+Logs are currently emitted as JSON to stdout only. The natural next step would be adding a log aggregation backend. Grafana Loki with Promtail can be used given Grafana is already in the stack. That would make logs queryable alongside metrics in the same dashboard, and enable alerts on log events like `rollback_triggered`.
+
+Redis was initially planned to be implemented but was then removed from the final implementation. The platform uses FastAPI BackgroundTasks for shadow inference and a daemon thread scheduler for periodic drift checks which is sufficient for a single-worker deployment. Redis would become necessary when scaling to multiple API workers, where background tasks can't share in-process state. At that point, Redis would serve as a job queue (via Celery or RQ) to distribute shadow inference and drift computation across workers without race conditions.
 
 The next step in this project for me would be to explore how this pipeline would work with larger models such as LLMs and maybe exploring LLM hallucinations as the drift metric.

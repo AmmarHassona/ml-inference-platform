@@ -45,19 +45,7 @@ services:
       - ./grafana/provisioning:/etc/grafana/provisioning
     restart: unless-stopped
   
-  redis: # reserved for future async job queue
-    image: redis:7-alpine
-    ports: 
-      - "6379:6379"
-    networks:
-      - mlplatform
-    healthcheck:
-      test: ["CMD", "redis-cli", "ping"]
-      interval: 10s
-      timeout: 5s
-      retries: 3
-    restart: unless-stopped
-  
+
 networks:
   mlplatform:
     driver: bridge
