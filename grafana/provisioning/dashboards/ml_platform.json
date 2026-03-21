@@ -740,6 +740,47 @@
       "title": "Text Request Rate",
       "type": "timeseries"
     }
+    ,{
+      "datasource": {
+        "type": "loki",
+        "uid": "loki"
+      },
+      "fieldConfig": {
+        "defaults": {},
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 10,
+        "w": 24,
+        "x": 0,
+        "y": 40
+      },
+      "id": 10,
+      "options": {
+        "dedupStrategy": "none",
+        "enableLogDetails": true,
+        "prettifyLogMessage": true,
+        "showCommonLabels": false,
+        "showLabels": false,
+        "showTime": true,
+        "sortOrder": "Descending",
+        "wrapLogMessage": false
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "loki",
+            "uid": "loki"
+          },
+          "editorMode": "code",
+          "expr": "{container=~\".+-api-.+\"} | json | level=`warning` or level=`error`",
+          "queryType": "range",
+          "refId": "A"
+        }
+      ],
+      "title": "Warning & Error Events (Loki)",
+      "type": "logs"
+    }
   ],
   "preload": false,
   "schemaVersion": 42,

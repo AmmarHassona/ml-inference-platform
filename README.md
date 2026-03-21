@@ -17,7 +17,7 @@ The platform serves two inference endpoints backed by ONNX Runtime. The tabular 
 
 A background scheduler runs every 60 seconds and does three things: PSI drift detection on a rolling window of tabular features against the training distribution, cosine similarity drift detection on text embeddings against a reference set built from the first 50 requests, and a rollback check that reverts canary traffic if v1/v2 prediction divergence exceeds 15%.
 
-Prometheus scrapes `/metrics` every 15 seconds. Seven custom metrics are exposed alongside the auto-instrumented HTTP metrics from `prometheus-fastapi-instrumentator`. Grafana is provisioned automatically with a 9-panel dashboard and two datasources (Prometheus and Loki). Four alert rules cover PSI drift, embedding drift, P95 latency, and error rate. All application logs are emitted as structured JSON via structlog, collected by Promtail, and stored in Loki which makes them queryable alongside metrics in Grafana.
+Prometheus scrapes `/metrics` every 15 seconds. Seven custom metrics are exposed alongside the auto-instrumented HTTP metrics from `prometheus-fastapi-instrumentator`. Grafana is provisioned automatically with a 10-panel dashboard and two datasources (Prometheus and Loki). Four alert rules cover PSI drift, embedding drift, P95 latency, and error rate. All application logs are emitted as structured JSON via structlog, collected by Promtail, and stored in Loki which makes them queryable alongside metrics in Grafana.
 
 ```
                         ┌─────────────────────────────────────────┐
@@ -207,7 +207,7 @@ curl -X POST http://localhost:8000/predict/text \
 
 ## Monitoring and Observability
 
-Grafana is provisioned automatically with two datasources (Prometheus and Loki) and a 9-panel dashboard. Nothing to configure manually.
+Grafana is provisioned automatically with two datasources (Prometheus and Loki) and a 10-panel dashboard. Nothing to configure manually.
 
 | Panel | Metric | Description |
 |-------|--------|-------------|
@@ -220,6 +220,7 @@ Grafana is provisioned automatically with two datasources (Prometheus and Loki) 
 | Shadow Model Divergence | `ml_shadow_divergence` | Fraction of recent requests where v1 and v2 disagreed. Rollback triggers at 0.15. |
 | Embedding Drift Score | `ml_embedding_drift_score` | Mean cosine distance between current embeddings and the reference window. Threshold at 0.3. |
 | Text Request Rate | `http_requests_total` | Requests per second filtered to `/predict/text`. |
+| Application Logs | Loki | Live warning and error log events from the API container, queryable by level and event name. |
 
 ---
 
