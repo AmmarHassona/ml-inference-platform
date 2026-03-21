@@ -59,6 +59,7 @@ Prometheus scrapes `/metrics` every 15 seconds. Seven custom metrics are exposed
 | Containerisation | Docker Compose |
 | CI | GitHub Actions |
 | Load testing | Locust |
+| Unit testing | pytest |
 | Cache / queue | Redis (provisioned, reserved for async job queue) |
 
 ---
@@ -340,6 +341,10 @@ ml-inference-platform/
 ├── scripts/
 │   ├── export_model.py        # Train and export tabular models to ONNX
 │   └── export_minilm.py       # Download and export MiniLM to ONNX
+├── tests/
+│   ├── test_drift.py          # PSI calculation correctness tests
+│   ├── test_router.py         # Canary rollback boundary condition tests
+│   └── test_embedding_drift.py # Embedding reference locking and drift score tests
 ├── .github/
 │   └── workflows/
 │       └── ci.yaml                # GitHub Actions CI pipeline
@@ -357,16 +362,17 @@ The project uses a GitHub Actions workflow (`.github/workflows/ci.yaml`) that ru
 
 The pipeline:
 1. Sets up Python 3.10 and installs dependencies via `uv`, with the uv package cache keyed on `requirements.txt`
-2. Exports the ONNX models by running both export scripts, with the HuggingFace model download cached across runs
-3. Builds the Docker image via BuildKit with layer caching, so only changed layers are rebuilt
-4. Starts the full stack with `docker compose up -d` and waits for the API to be ready
-5. Runs tests against `/health`, `/predict`, and `/predict/text`
-6. Tears down the stack unconditionally on completion
+2. Runs the pytest unit test suite (PSI drift, rollback boundary conditions, embedding drift) — fails fast before any Docker work if logic is broken
+3. Exports the ONNX models by running both export scripts, with the HuggingFace model download cached across runs
+4. Builds the Docker image via BuildKit with layer caching, so only changed layers are rebuilt
+5. Starts the full stack with `docker compose up -d` and waits for the API to be ready
+6. Runs smoke tests against `/health`, `/predict`, and `/predict/text`
+7. Tears down the stack unconditionally on completion
 
 ---
 
 ## What I Would Change
 
-The main thing I'd change is the dataset. Iris is convenient for getting the infrastructure off the ground, but models trained on it are too accurate (100% test accuracy) to produce realistic drift or divergence signals. The PSI alerts were triggered by manually injecting noisy data. A dataset with natural distribution shift over time, like credit scoring or sensor data, would make the drift and rollback mechanics far more interesting to watch. I'd also add a proper test suite around the scheduler, PSI calculation, and rollback trigger. The infrastructure is only trustworthy if the edge cases are tested. 
+The main thing I'd change is the dataset. Iris is convenient for getting the infrastructure off the ground, but models trained on it are too accurate (100% test accuracy) to produce realistic drift or divergence signals. The PSI alerts were triggered by manually injecting noisy data. A dataset with natural distribution shift over time, like credit scoring or sensor data, would make the drift and rollback mechanics far more interesting to watch.
 
 The next step in this project for me would be to explore how this pipeline would work with larger models such as LLMs and maybe exploring LLM hallucinations as the drift metric.

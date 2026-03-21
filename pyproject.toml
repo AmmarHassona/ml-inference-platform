@@ -97,3 +97,6 @@ dependencies = [
     "zope-event==6.1",
     "zope-interface==8.2",
 ]
+[tool.pytest.ini_options]
+pythonpath = ["."]
+testpaths = ["tests"]

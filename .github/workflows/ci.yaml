@@ -36,6 +36,9 @@ jobs:
           path: ~/.cache/huggingface
           key: huggingface-minilm-v1
 
+      - name: Run unit tests
+        run: pytest tests/ -v
+
       - name: Export models
         run: |
           python scripts/export_model.py
