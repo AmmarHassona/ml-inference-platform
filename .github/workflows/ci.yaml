@@ -41,7 +41,7 @@ jobs:
           python scripts/export_model.py
           python scripts/export_minilm.py
 
-      - name: Run unit tests
+      - name: Run tests
         run: pytest tests/ -v
 
       - name: Set up Docker Buildx

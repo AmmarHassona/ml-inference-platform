@@ -1,3 +1,4 @@
+import json
 from pathlib import Path
 
 # Drift detection
@@ -29,3 +30,8 @@ MODEL_PATH = BASE_DIR / "model_artifacts" / "model_v1.onnx"
 SHADOW_MODEL_PATH = BASE_DIR / "model_artifacts" / "model_v2.onnx"
 REFERENCE_FEATURES_PATH = BASE_DIR / "model_artifacts" / "reference_features.npy"
 MINI_LM_PATH = BASE_DIR / "model_artifacts" / "minilm"
+CORPUS_PATH = BASE_DIR / "app" / "corpus.json"
+
+# Corpus loaded once at import time
+with open(CORPUS_PATH) as f:
+    CORPUS: list[tuple[str, str]] = [(e["text"], e["label"]) for e in json.load(f)]

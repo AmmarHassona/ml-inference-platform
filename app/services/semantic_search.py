@@ -1,36 +1,8 @@
 import numpy as np
+from app.config import CORPUS
 from app.services.embedding_drift import cosine_similarity
 
-_corpus = [
-    # machine_learning
-    ("Machine learning is training models to learn patterns from data", "machine_learning"),
-    ("Neural networks are inspired by the structure of the human brain", "machine_learning"),
-    ("Gradient descent is an optimization algorithm used to train models", "machine_learning"),
-    ("Overfitting occurs when a model learns noise instead of signal", "machine_learning"),
-    ("Random forests combine many decision trees to improve prediction accuracy", "machine_learning"),
-    ("Transformers use self-attention to process sequences in parallel", "machine_learning"),
-    # sports
-    ("The team scored in the final minutes to win the championship", "sports"),
-    ("Athletes train for years to compete at the Olympic Games", "sports"),
-    ("The referee awarded a penalty kick after the foul in the box", "sports"),
-    ("Basketball players must master dribbling, passing, and shooting", "sports"),
-    ("The marathon runner collapsed at the finish line after 26 miles", "sports"),
-    ("Tennis requires both physical endurance and precise technique", "sports"),
-    # finance
-    ("Interest rates set by central banks influence borrowing costs", "finance"),
-    ("Diversifying a portfolio reduces exposure to individual asset risk", "finance"),
-    ("Inflation erodes the purchasing power of money over time", "finance"),
-    ("Stock prices reflect investor expectations about future earnings", "finance"),
-    ("A bond is a fixed income instrument representing a loan to a borrower", "finance"),
-    ("Hedge funds use leverage and derivatives to amplify returns", "finance"),
-    # health
-    ("Regular exercise reduces the risk of cardiovascular disease", "health"),
-    ("A balanced diet rich in vegetables supports immune function", "health"),
-    ("Sleep deprivation impairs cognitive performance and memory consolidation", "health"),
-    ("Vaccination programs have eliminated several previously deadly diseases", "health"),
-    ("Chronic stress elevates cortisol levels and damages long-term health", "health"),
-    ("Early cancer detection significantly improves survival outcomes", "health"),
-]
+_corpus = CORPUS
 
 # populated at startup by load_corpus()
 _corpus_embeddings: list[np.ndarray] = []

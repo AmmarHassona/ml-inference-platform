@@ -69,7 +69,7 @@ Prometheus scrapes `/metrics` every 15 seconds. Seven custom metrics are exposed
 | Containerisation | Docker Compose |
 | CI | GitHub Actions |
 | Load testing | Locust |
-| Unit testing | pytest |
+| Testing | pytest (unit + integration) |
 
 ---
 
@@ -379,6 +379,7 @@ ml-inference-platform/
 ├── app/
 │   ├── __init__.py
 │   ├── config.py              # All tunable constants (thresholds, window sizes)
+│   ├── corpus.json            # Semantic search corpus (24 sentences across 4 topics)
 │   ├── logger.py              # structlog configuration and get_logger helper
 │   ├── main.py                # FastAPI app, endpoints, scheduler
 │   ├── metrics.py             # Prometheus metric definitions
@@ -408,7 +409,8 @@ ml-inference-platform/
 │   ├── test_drift.py           # PSI calculation correctness tests
 │   ├── test_router.py          # Canary rollback boundary condition tests
 │   ├── test_embedding_drift.py # Embedding reference locking and drift score tests
-│   └── test_semantic_search.py # Nearest-neighbour label classification tests
+│   ├── test_semantic_search.py # Nearest-neighbour label classification tests
+│   └── test_integration.py    # Integration tests covering all endpoints via TestClient
 ├── .github/
 │   └── workflows/
 │       └── ci.yaml                # GitHub Actions CI pipeline
@@ -427,7 +429,7 @@ The project uses a GitHub Actions workflow (`.github/workflows/ci.yaml`) that ru
 The pipeline:
 1. Sets up Python 3.10 and installs dependencies via `uv`, with the uv package cache keyed on `requirements.txt`
 2. Exports the ONNX models by running both export scripts, with the HuggingFace model download cached across runs
-3. Runs the pytest unit test suite (PSI drift, rollback boundary conditions, embedding drift, semantic search) — fails fast before any Docker work if logic is broken
+3. Runs the full pytest test suite — unit tests (PSI drift, rollback boundary conditions, embedding drift, semantic search) and integration tests (all endpoints via FastAPI TestClient) — fails fast before any Docker work if logic is broken
 4. Builds the Docker image via BuildKit with layer caching, so only changed layers are rebuilt
 5. Starts the full stack with `docker compose up -d` and waits for the API to be ready
 6. Runs smoke tests against `/health`, `/predict`, and `/predict/text`
@@ -440,5 +442,9 @@ The pipeline:
 The main thing I'd change is the dataset. Iris is convenient for getting the infrastructure off the ground, but models trained on it are too accurate (100% test accuracy) to produce realistic drift or divergence signals. The PSI alerts were triggered by manually injecting noisy data. A dataset with natural distribution shift over time, like credit scoring or sensor data, would make the drift and rollback mechanics far more interesting to watch.
 
 Redis was initially planned to be implemented but was then removed from the final implementation. The platform uses FastAPI BackgroundTasks for shadow inference and a daemon thread scheduler for periodic drift checks which is sufficient for a single-worker deployment. Redis would become necessary when scaling to multiple API workers, where background tasks can't share in-process state. At that point, Redis would serve as a job queue (via Celery or RQ) to distribute shadow inference and drift computation across workers without race conditions.
+
+The Prometheus alert rules are configured but have no notification channel wired up, alerts fire internally but go nowhere. In a real deployment these would route to PagerDuty, Slack, or a webhook via Alertmanager.
+
+Grafana uses the default `admin / admin` credentials. This is fine for local development but would be replaced with environment-variable-configured credentials.
 
 The next step in this project for me would be to explore how this pipeline would work with larger models such as LLMs and maybe exploring LLM hallucinations as the drift metric.
