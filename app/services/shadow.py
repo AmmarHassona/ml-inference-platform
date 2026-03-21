@@ -3,7 +3,9 @@ from collections import deque
 from app.metrics import SHADOW_DIVERGENCE
 from app.services.router import update_divergence
 from app.config import SHADOW_BUFFER_SIZE, SHADOW_MIN_SAMPLES
-import logging
+from app.logger import get_logger
+
+logger = get_logger("shadow")
 
 # rolling buffer of (v1_prediction, v2_prediction) pairs
 _comparison_buffer = deque(maxlen=SHADOW_BUFFER_SIZE)
@@ -21,5 +23,6 @@ async def run_shadow_inference(features: np.ndarray, v1_prediction: int, app_sta
             divergence = sum(v1 != v2 for v1, v2 in _comparison_buffer) / len(_comparison_buffer)
             SHADOW_DIVERGENCE.set(divergence)
             update_divergence(divergence)
+            logger.info("shadow_divergence_updated", divergence=round(divergence, 4), buffer_size=len(_comparison_buffer))
     except Exception as e:
-        logging.warning(f"Shadow inference failed: {e}")
+        logger.warning("shadow_inference_failed", error=str(e))

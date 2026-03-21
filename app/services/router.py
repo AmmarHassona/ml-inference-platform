@@ -1,8 +1,10 @@
 import random
 from app.metrics import ROLLBACK_COUNTER
 from app.config import CANARY_PERCENT, DIVERGENCE_THRESHOLD
-import logging
+from app.logger import get_logger
 import threading
+
+logger = get_logger("router")
 
 _divergence_lock = threading.Lock()
 _current_divergence = 0.0
@@ -16,8 +18,9 @@ def get_active_model() -> str:
     
 def trigger_rollback():
     global canary_percent
+    prev = canary_percent
     canary_percent = 0
-    logging.warning("ROLLBACK TRIGGERED: routing all traffic to v1")
+    logger.warning("rollback_triggered", divergence=_current_divergence, canary_percent_before=prev, canary_percent_after=0)
     ROLLBACK_COUNTER.inc(1)
 
 def update_divergence(value: float):

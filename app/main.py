@@ -13,7 +13,9 @@ from app.services.shadow import run_shadow_inference
 from app.services.router import get_active_model, run_rollback_check
 from app.services.embedding_drift import compute_embedding_drift, record_embedding
 from transformers import AutoTokenizer
-import logging
+from app.logger import setup_logging, get_logger
+
+logger = get_logger("main")
 
 def start_drift_scheduler():
     def loop():
@@ -24,12 +26,13 @@ def start_drift_scheduler():
                 run_rollback_check()
                 compute_embedding_drift()
             except Exception as e:
-                logging.error(f"Scheduler error: {e}", exc_info=True)
+                logger.error("scheduler_error", error=str(e))
     thread = threading.Thread(target = loop, daemon = True)
     thread.start()
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
+    setup_logging()
     # load models once at startup
     app.state.session_v1 = ort.InferenceSession(str(MODEL_PATH))
     app.state.session_v2 = ort.InferenceSession(str(SHADOW_MODEL_PATH))

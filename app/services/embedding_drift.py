@@ -2,8 +2,10 @@ import numpy as np
 from collections import deque
 from app.metrics import EMBEDDING_DRIFT_SCORE
 from app.config import EMBEDDING_REFERENCE_SIZE, EMBEDDING_BUFFER_SIZE, EMBEDDING_MIN_SAMPLES
-import logging
+from app.logger import get_logger
 import threading
+
+logger = get_logger("embedding_drift")
 
 _reference_embeddings = []
 _reference_locked = False
@@ -19,6 +21,7 @@ def record_embedding(embedding: list[float]):
             _reference_embeddings.append(emb)
             if len(_reference_embeddings) >= EMBEDDING_REFERENCE_SIZE:
                 _reference_locked = True
+                logger.info("embedding_reference_locked", reference_size=len(_reference_embeddings))
             return
         _embedding_window.append(emb)
 
@@ -38,3 +41,7 @@ def compute_embedding_drift():
         similarities.append(np.mean(sims))
     drift_score = 1.0 - float(np.mean(similarities))
     EMBEDDING_DRIFT_SCORE.set(drift_score)
+    if drift_score > 0.3:
+        logger.warning("embedding_drift_detected", drift_score=round(drift_score, 4), window_size=len(window_snapshot))
+    else:
+        logger.info("embedding_drift_check", drift_score=round(drift_score, 4), window_size=len(window_snapshot))

@@ -4,6 +4,9 @@ import pandas as pd
 from collections import deque
 from app.config import REFERENCE_FEATURES_PATH, PSI_WINDOW_SIZE, PSI_MIN_SAMPLES, PSI_N_BINS
 from app.metrics import PSI_SCORE
+from app.logger import get_logger
+
+logger = get_logger("drift")
 
 reference_features = None
 bin_edges_per_feature = []
@@ -51,4 +54,8 @@ def run_drift_check():
     scores = calculate_psi(current)
     for feature_name, score in scores.items():
         PSI_SCORE.labels(feature_name=feature_name).set(score)
+        if score > 0.2:
+            logger.warning("psi_drift_detected", feature=feature_name, psi_score=round(score, 4))
+        else:
+            logger.info("psi_check", feature=feature_name, psi_score=round(score, 4))
     return scores
