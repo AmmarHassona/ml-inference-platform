@@ -1,0 +1,130 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 960 660" font-family="'Segoe UI', system-ui, sans-serif">
+
+  <!-- Background -->
+  <rect width="960" height="660" fill="#0f1117"/>
+
+  <!-- ─── CLIENT ─── -->
+  <rect x="30" y="270" width="110" height="44" rx="8" fill="#1e2130" stroke="#4a90d9" stroke-width="1.5"/>
+  <text x="85" y="287" text-anchor="middle" fill="#a0b4cc" font-size="11" font-weight="600">HTTP Client</text>
+  <text x="85" y="303" text-anchor="middle" fill="#5c7a99" font-size="10">POST /predict</text>
+
+  <!-- Arrow: Client → FastAPI -->
+  <line x1="141" y1="292" x2="195" y2="292" stroke="#4a90d9" stroke-width="1.5" marker-end="url(#arrow-blue)"/>
+
+  <!-- ─── FASTAPI BOX ─── -->
+  <rect x="196" y="80" width="400" height="430" rx="12" fill="#161b2e" stroke="#2d3a5c" stroke-width="1.5"/>
+  <text x="396" y="108" text-anchor="middle" fill="#4a90d9" font-size="13" font-weight="700">FastAPI  ·  port 8000</text>
+  <line x1="216" y1="116" x2="576" y2="116" stroke="#2d3a5c" stroke-width="1"/>
+
+  <!-- Canary Router -->
+  <rect x="266" y="128" width="260" height="48" rx="8" fill="#1a2240" stroke="#3a5080" stroke-width="1.2"/>
+  <text x="396" y="147" text-anchor="middle" fill="#c8d8f0" font-size="11" font-weight="600">Canary Router</text>
+  <text x="396" y="163" text-anchor="middle" fill="#5c7a99" font-size="10">90% → v1  ·  10% → v2</text>
+
+  <!-- v1 model -->
+  <rect x="226" y="210" width="155" height="52" rx="8" fill="#1a2a20" stroke="#3a6040" stroke-width="1.2"/>
+  <text x="303" y="230" text-anchor="middle" fill="#7ecf9a" font-size="11" font-weight="600">ONNX v1  (RF)</text>
+  <text x="303" y="246" text-anchor="middle" fill="#5c7a99" font-size="10">stable model</text>
+  <text x="303" y="258" text-anchor="middle" fill="#3a6040" font-size="9">RandomForest</text>
+
+  <!-- v2 model -->
+  <rect x="411" y="210" width="155" height="52" rx="8" fill="#2a1f20" stroke="#6a3a40" stroke-width="1.2"/>
+  <text x="488" y="230" text-anchor="middle" fill="#e08a8a" font-size="11" font-weight="600">ONNX v2  (GB)</text>
+  <text x="488" y="246" text-anchor="middle" fill="#5c7a99" font-size="10">shadow mode</text>
+  <text x="488" y="258" text-anchor="middle" fill="#6a3a40" font-size="9">GradientBoosting</text>
+
+  <!-- Arrows: Router → v1, Router → v2 -->
+  <line x1="340" y1="176" x2="303" y2="210" stroke="#3a5080" stroke-width="1.2" marker-end="url(#arrow-dim)"/>
+  <line x1="452" y1="176" x2="488" y2="210" stroke="#3a5080" stroke-width="1.2" marker-end="url(#arrow-dim)"/>
+
+  <!-- MiniLM -->
+  <rect x="266" y="296" width="260" height="52" rx="8" fill="#1e1a2e" stroke="#5a3a80" stroke-width="1.2"/>
+  <text x="396" y="316" text-anchor="middle" fill="#b39ee0" font-size="11" font-weight="600">ONNX MiniLM</text>
+  <text x="396" y="332" text-anchor="middle" fill="#5c7a99" font-size="10">topic classification  ·  /predict/text</text>
+  <text x="396" y="344" text-anchor="middle" fill="#5a3a80" font-size="9">cosine similarity nearest-neighbour</text>
+
+  <!-- Scheduler -->
+  <rect x="226" y="382" width="340" height="96" rx="8" fill="#1a1e30" stroke="#2d4060" stroke-width="1.2"/>
+  <text x="396" y="402" text-anchor="middle" fill="#a0b4cc" font-size="11" font-weight="600">Background Scheduler  ·  60s interval</text>
+  <text x="246" y="422" fill="#5c9a7a" font-size="10">▸  PSI drift check  (tabular features)</text>
+  <text x="246" y="438" fill="#9a7ab0" font-size="10">▸  Embedding drift check  (cosine distance)</text>
+  <text x="246" y="454" fill="#c08060" font-size="10">▸  Divergence → rollback  (threshold 0.15)</text>
+  <text x="246" y="470" fill="#608090" font-size="10">▸  Metrics exposure  →  /metrics</text>
+
+  <!-- ─── PROMETHEUS ─── -->
+  <rect x="660" y="148" width="175" height="60" rx="8" fill="#2a1e10" stroke="#c05020" stroke-width="1.5"/>
+  <text x="747" y="172" text-anchor="middle" fill="#e07840" font-size="12" font-weight="700">Prometheus</text>
+  <text x="747" y="192" text-anchor="middle" fill="#7a5030" font-size="10">port 9090  ·  scrapes /metrics</text>
+
+  <!-- Arrow: FastAPI → Prometheus -->
+  <line x1="596" y1="176" x2="659" y2="176" stroke="#c05020" stroke-width="1.5" marker-end="url(#arrow-orange)"/>
+
+  <!-- ─── GRAFANA ─── -->
+  <!-- y=244, h=70 → bottom=314 -->
+  <rect x="660" y="244" width="175" height="70" rx="8" fill="#2a1a10" stroke="#e07020" stroke-width="1.5"/>
+  <text x="747" y="270" text-anchor="middle" fill="#f09040" font-size="12" font-weight="700">Grafana</text>
+  <text x="747" y="292" text-anchor="middle" fill="#7a5020" font-size="10">port 3000  ·  10-panel dashboard</text>
+
+  <!-- Arrow: Prometheus → Grafana -->
+  <line x1="747" y1="208" x2="747" y2="243" stroke="#e07020" stroke-width="1.5" marker-end="url(#arrow-orange2)"/>
+
+  <!-- ─── ALERT RULES ─── -->
+  <!-- y=322, h=58 → bottom=380 -->
+  <rect x="660" y="322" width="175" height="58" rx="4" fill="#1e1410" stroke="#804020" stroke-width="1"/>
+  <text x="747" y="337" text-anchor="middle" fill="#c07840" font-size="10" font-weight="600">Alert Rules</text>
+  <line x1="666" y1="342" x2="829" y2="342" stroke="#804020" stroke-width="0.8"/>
+  <text x="747" y="355" text-anchor="middle" fill="#906040" font-size="9">PSI drift  ·  embedding drift</text>
+  <text x="747" y="370" text-anchor="middle" fill="#906040" font-size="9">P95 latency  ·  error rate</text>
+
+  <!-- ─── LOKI ─── -->
+  <!-- y=388, h=60 → bottom=448 -->
+  <rect x="660" y="388" width="175" height="60" rx="8" fill="#10201a" stroke="#20a060" stroke-width="1.5"/>
+  <text x="747" y="412" text-anchor="middle" fill="#40c080" font-size="12" font-weight="700">Loki</text>
+  <text x="747" y="432" text-anchor="middle" fill="#207050" font-size="10">port 3100  ·  log store</text>
+
+  <!-- Arrow: Loki → Grafana (routed left to avoid alert rules box) -->
+  <path d="M 660,418 L 636,418 L 636,279 L 660,279" stroke="#20a060" stroke-width="1.5" fill="none" marker-end="url(#arrow-green)"/>
+
+  <!-- ─── PROMTAIL ─── -->
+  <!-- y=486, h=60 → bottom=546 -->
+  <rect x="660" y="486" width="175" height="60" rx="8" fill="#101e18" stroke="#186040" stroke-width="1.2"/>
+  <text x="747" y="510" text-anchor="middle" fill="#30a060" font-size="11" font-weight="600">Promtail</text>
+  <text x="747" y="530" text-anchor="middle" fill="#186040" font-size="10">Docker log collector</text>
+
+  <!-- Arrow: Promtail → Loki -->
+  <line x1="747" y1="485" x2="747" y2="449" stroke="#20a060" stroke-width="1.5" marker-end="url(#arrow-green)"/>
+
+  <!-- Arrow: Container stdout → Promtail -->
+  <line x1="596" y1="516" x2="659" y2="516" stroke="#186040" stroke-width="1.5" marker-end="url(#arrow-green2)"/>
+  <text x="627" y="532" text-anchor="middle" fill="#186040" font-size="9">stdout</text>
+
+  <!-- Arrow: Client request label -->
+  <text x="168" y="285" text-anchor="middle" fill="#4a90d9" font-size="9">request</text>
+
+  <!-- Response arrow back -->
+  <line x1="196" y1="305" x2="141" y2="305" stroke="#4a90d9" stroke-width="1.2" stroke-dasharray="4,3" marker-end="url(#arrow-blue)"/>
+  <text x="168" y="320" text-anchor="middle" fill="#4a90d9" font-size="9">response</text>
+
+  <!-- ─── ARROW MARKERS ─── -->
+  <defs>
+    <marker id="arrow-blue" markerWidth="8" markerHeight="8" refX="6" refY="3" orient="auto">
+      <path d="M0,0 L0,6 L8,3 z" fill="#4a90d9"/>
+    </marker>
+    <marker id="arrow-dim" markerWidth="8" markerHeight="8" refX="6" refY="3" orient="auto">
+      <path d="M0,0 L0,6 L8,3 z" fill="#3a5080"/>
+    </marker>
+    <marker id="arrow-orange" markerWidth="8" markerHeight="8" refX="6" refY="3" orient="auto">
+      <path d="M0,0 L0,6 L8,3 z" fill="#c05020"/>
+    </marker>
+    <marker id="arrow-orange2" markerWidth="8" markerHeight="8" refX="6" refY="3" orient="auto">
+      <path d="M0,0 L0,6 L8,3 z" fill="#e07020"/>
+    </marker>
+    <marker id="arrow-green" markerWidth="8" markerHeight="8" refX="6" refY="3" orient="auto">
+      <path d="M0,0 L0,6 L8,3 z" fill="#20a060"/>
+    </marker>
+    <marker id="arrow-green2" markerWidth="8" markerHeight="8" refX="6" refY="3" orient="auto">
+      <path d="M0,0 L0,6 L8,3 z" fill="#186040"/>
+    </marker>
+  </defs>
+
+</svg>

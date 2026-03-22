@@ -12,7 +12,7 @@ from app.services.drift import record_features, run_drift_check, initialize_drif
 from app.services.shadow import run_shadow_inference
 from app.services.router import get_active_model, run_rollback_check
 from app.services.embedding_drift import compute_embedding_drift, record_embedding
-import app.services.semantic_search as semantic_search
+import app.services.topic_classification as topic_classification
 from transformers import AutoTokenizer
 from app.logger import setup_logging, get_logger
 
@@ -39,7 +39,7 @@ async def lifespan(app: FastAPI):
     app.state.session_v2 = ort.InferenceSession(str(SHADOW_MODEL_PATH))
     app.state.minilm_session = ort.InferenceSession(str(MINI_LM_PATH / "model.onnx"))
     app.state.minilm_tokenizer = AutoTokenizer.from_pretrained(str(MINI_LM_PATH))
-    semantic_search.load_corpus(app.state.minilm_session, app.state.minilm_tokenizer)
+    topic_classification.load_corpus(app.state.minilm_session, app.state.minilm_tokenizer)
     initialize_drift()
     start_drift_scheduler()
     yield
@@ -97,8 +97,8 @@ async def predict_text(request: Request, body: TextRequest):
     tokenizer = request.app.state.minilm_tokenizer
     sentences = body.text
 
-    embedding = semantic_search.embed_text(sentences, session, tokenizer)
-    label, confidence, matched_document = semantic_search.find_nearest(embedding)
+    embedding = topic_classification.embed_text(sentences, session, tokenizer)
+    label, confidence, matched_document = topic_classification.find_nearest(embedding)
 
     record_embedding(embedding)
 

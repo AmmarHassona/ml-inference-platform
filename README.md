@@ -13,43 +13,13 @@ A production-style ML inference platform built to explore ML systems engineering
 
 ## Architecture Overview
 
-The platform serves two inference endpoints backed by ONNX Runtime. The tabular endpoint (`/predict`) routes requests through a canary router that sends 10% of traffic to a shadow v2 model (GradientBoosting) while the remaining 90% goes to the stable v1 model (RandomForest). Both models run in the same process, loaded at startup. The text endpoint (`/predict/text`) performs semantic search using `sentence-transformers/all-MiniLM-L6-v2` exported to ONNX via HuggingFace Optimum. At startup, a 24-sentence corpus across four topics (machine learning, sports, finance, health) is embedded and stored in memory. Incoming queries are embedded via mean-pooled, L2-normalised inference entirely in NumPy, then matched against the corpus by cosine similarity to return a topic label, confidence score, and matched document. Embeddings are recorded for drift monitoring.
+The platform serves two inference endpoints backed by ONNX Runtime. The tabular endpoint (`/predict`) routes requests through a canary router that sends 10% of traffic to a shadow v2 model (GradientBoosting) while the remaining 90% goes to the stable v1 model (RandomForest). Both models run in the same process, loaded at startup. The text endpoint (`/predict/text`) performs topic classification using `sentence-transformers/all-MiniLM-L6-v2` exported to ONNX via HuggingFace Optimum. At startup, a 24-sentence corpus across four topics (machine learning, sports, finance, health) is embedded and stored in memory. Incoming queries are embedded via mean-pooled, L2-normalised inference entirely in NumPy, then matched against the corpus by cosine similarity to return a topic label, confidence score, and matched document. Embeddings are recorded for drift monitoring.
 
 A background scheduler runs every 60 seconds and does three things: PSI drift detection on a rolling window of tabular features against the training distribution, cosine similarity drift detection on text embeddings against a reference set built from the first 50 requests, and a rollback check that reverts canary traffic if v1/v2 prediction divergence exceeds 15%.
 
 Prometheus scrapes `/metrics` every 15 seconds. Seven custom metrics are exposed alongside the auto-instrumented HTTP metrics from `prometheus-fastapi-instrumentator`. Grafana is provisioned automatically with a 10-panel dashboard and two datasources (Prometheus and Loki). Four alert rules cover PSI drift, embedding drift, P95 latency, and error rate. All application logs are emitted as structured JSON via structlog, collected by Promtail, and stored in Loki which makes them queryable alongside metrics in Grafana.
 
-```
-                        ┌─────────────────────────────────────────┐
-                        │              FastAPI (port 8000)         │
-                        │                                          │
-  HTTP Request ────────►│  Canary Router (10% → v2, 90% → v1)    │
-                        │       │                  │               │
-                        │  ONNX v1 (RF)      ONNX v2 (GB)         │
-                        │  [tabular]         [shadow mode]         │
-                        │                                          │
-                        │  ONNX MiniLM (semantic search)          │
-                        │                                          │
-                        │  Background Scheduler (60s interval)     │
-                        │  ├── PSI drift check                     │
-                        │  ├── Embedding drift check               │
-                        │  └── Divergence → rollback check         │
-                        └──────────────┬──────────────────────────┘
-                                       │ /metrics
-                                       ▼
-                              Prometheus (port 9090)
-                                       │
-                                       ▼
-                               Grafana (port 3000)
-
-                        ┌─────────────────────────────────────────┐
-                        │         Log Pipeline                     │
-                        │                                          │
-  Container stdout ────►│  Promtail → Loki (port 3100)            │
-                        │                    │                     │
-                        │             Grafana Explore              │
-                        └─────────────────────────────────────────┘
-```
+![Architecture](docs/architecture.svg)
 
 ---
 
@@ -388,7 +358,7 @@ ml-inference-platform/
 │       ├── drift.py           # PSI computation and feature window
 │       ├── embedding_drift.py # Cosine similarity drift for text
 │       ├── router.py          # Canary routing and rollback logic
-│       ├── semantic_search.py # Corpus embedding, nearest-neighbour search
+│       ├── topic_classification.py # Corpus embedding, nearest-neighbour topic classification
 │       └── shadow.py          # Shadow v2 inference and divergence tracking
 ├── docs/                      # Screenshots: load tests, drift incidents, alerts
 ├── grafana/
@@ -409,7 +379,7 @@ ml-inference-platform/
 │   ├── test_drift.py           # PSI calculation correctness tests
 │   ├── test_router.py          # Canary rollback boundary condition tests
 │   ├── test_embedding_drift.py # Embedding reference locking and drift score tests
-│   ├── test_semantic_search.py # Nearest-neighbour label classification tests
+│   ├── test_topic_classification.py # Nearest-neighbour topic label classification tests
 │   └── test_integration.py    # Integration tests covering all endpoints via TestClient
 ├── .github/
 │   └── workflows/
@@ -429,7 +399,7 @@ The project uses a GitHub Actions workflow (`.github/workflows/ci.yaml`) that ru
 The pipeline:
 1. Sets up Python 3.10 and installs dependencies via `uv`, with the uv package cache keyed on `requirements.txt`
 2. Exports the ONNX models by running both export scripts, with the HuggingFace model download cached across runs
-3. Runs the full pytest test suite — unit tests (PSI drift, rollback boundary conditions, embedding drift, semantic search) and integration tests (all endpoints via FastAPI TestClient) — fails fast before any Docker work if logic is broken
+3. Runs the full pytest test suite — unit tests (PSI drift, rollback boundary conditions, embedding drift, topic classification) and integration tests (all endpoints via FastAPI TestClient) — fails fast before any Docker work if logic is broken
 4. Builds the Docker image via BuildKit with layer caching, so only changed layers are rebuilt
 5. Starts the full stack with `docker compose up -d` and waits for the API to be ready
 6. Runs smoke tests against `/health`, `/predict`, and `/predict/text`
