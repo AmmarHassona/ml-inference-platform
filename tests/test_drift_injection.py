@@ -30,7 +30,7 @@ def test_drift_score_rises_after_topic_shift():
     # baseline check — window is empty, no drift yet
     embedding_drift.compute_embedding_drift()
     baseline_score = EMBEDDING_DRIFT_SCORE._value.get()
-    assert baseline_score == 0.0  # metric untouched when window has < MIN_SAMPLES
+    assert baseline_score == 0.0  # gauge reads 0.0 before first successful drift check (empty window)
 
     # inject OOD embeddings (topic shift — opposite cluster)
     for _ in range(EMBEDDING_MIN_SAMPLES * 3):

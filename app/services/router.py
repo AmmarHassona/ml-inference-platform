@@ -28,8 +28,16 @@ def update_divergence(value: float):
     with _divergence_lock:
         _current_divergence = value
 
+def restore_canary():
+    global canary_percent
+    canary_percent = CANARY_PERCENT
+    logger.info("canary_restored", divergence=_current_divergence, canary_percent_after=CANARY_PERCENT)
+
 def run_rollback_check():
     with _divergence_lock:
         divergence = _current_divergence
     if divergence > DIVERGENCE_THRESHOLD:
-        trigger_rollback()
+        if canary_percent > 0:
+            trigger_rollback()
+    elif canary_percent == 0:
+        restore_canary()

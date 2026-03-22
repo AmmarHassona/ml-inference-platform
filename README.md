@@ -207,6 +207,7 @@ All application logs are emitted as JSON via `structlog`, making them queryable 
 | Event | Level | Key Fields |
 |-------|-------|-----------|
 | `rollback_triggered` | warning | `divergence`, `canary_percent_before`, `canary_percent_after` |
+| `canary_restored` | info | `divergence`, `canary_percent_after` |
 | `shadow_divergence_updated` | info | `divergence`, `buffer_size` |
 | `shadow_inference_failed` | warning | `error` |
 | `psi_drift_detected` | warning | `feature`, `psi_score` |
@@ -283,7 +284,7 @@ The first 50 text requests build a reference embedding set. Subsequent embedding
 
 **Canary routing:** 10% of `/predict` traffic is actively served by v2. The `get_active_model()` function draws a uniform random number; if it falls below the canary percentage, the request is served by v2 and the response is returned to the user.
 
-**Automated rollback:** the scheduler checks `ml_shadow_divergence` on every tick. If divergence exceeds 0.15 (v1 and v2 disagree on more than 15% of recent requests), `canary_percent` is set to zero and all traffic is routed to v1. The rollback event is counted in `ml_rollback_total` and logged at WARNING level.
+**Automated rollback:** the scheduler checks `ml_shadow_divergence` on every tick. If divergence exceeds 0.15 (v1 and v2 disagree on more than 15% of recent requests) and canary is still active, `canary_percent` is set to zero and all traffic is routed to v1. The rollback event is counted in `ml_rollback_total` and logged at WARNING level. If divergence later normalises below the threshold, canary is automatically restored to 10% and logged at INFO level as `canary_restored`.
 
 ---
 
