@@ -380,6 +380,7 @@ ml-inference-platform/
 │   ├── test_router.py          # Canary rollback boundary condition tests
 │   ├── test_embedding_drift.py # Embedding reference locking and drift score tests
 │   ├── test_topic_classification.py # Nearest-neighbour topic label classification tests
+│   └── test_drift_injection.py     # End-to-end drift injection: reference lock → baseline → OOD shift → threshold breach
 │   └── test_integration.py    # Integration tests covering all endpoints via TestClient
 ├── .github/
 │   └── workflows/
@@ -399,7 +400,7 @@ The project uses a GitHub Actions workflow (`.github/workflows/ci.yaml`) that ru
 The pipeline:
 1. Sets up Python 3.10 and installs dependencies via `uv`, with the uv package cache keyed on `requirements.txt`
 2. Exports the ONNX models by running both export scripts, with the HuggingFace model download cached across runs
-3. Runs the full pytest test suite — unit tests (PSI drift, rollback boundary conditions, embedding drift, topic classification) and integration tests (all endpoints via FastAPI TestClient) — fails fast before any Docker work if logic is broken
+3. Runs the full pytest test suite — unit tests (PSI drift, rollback boundary conditions, embedding drift, topic classification, end-to-end drift injection) and integration tests (all endpoints via FastAPI TestClient) — fails fast before any Docker work if logic is broken
 4. Builds the Docker image via BuildKit with layer caching, so only changed layers are rebuilt
 5. Starts the full stack with `docker compose up -d` and waits for the API to be ready
 6. Runs smoke tests against `/health`, `/predict`, and `/predict/text`
