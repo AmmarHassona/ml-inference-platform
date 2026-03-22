@@ -8,22 +8,22 @@ def reset_corpus():
     topic_classification._corpus_labels = []
     topic_classification._corpus_texts = []
 
-def test_ml_query_returns_ml_label():
+def test_sci_tech_query_returns_sci_tech_label():
     topic_classification._corpus_embeddings = [np.ones(384), np.full(384, -1.0)]
-    topic_classification._corpus_labels = ["machine_learning", "finance"]
-    topic_classification._corpus_texts = ["ML sentence", "Finance sentence"]
+    topic_classification._corpus_labels = ["sci_tech", "business"]
+    topic_classification._corpus_texts = ["Tech sentence", "Business sentence"]
 
     query = np.ones(384)
     label, _, _ = topic_classification.find_nearest(query)
-    
-    assert label == "machine_learning"
 
-def test_finance_query_returns_finance_label():
+    assert label == "sci_tech"
+
+def test_business_query_returns_business_label():
     topic_classification._corpus_embeddings = [np.ones(384), np.full(384, -1.0)]
-    topic_classification._corpus_labels = ["machine_learning", "finance"]
-    topic_classification._corpus_texts = ["ML sentence", "Finance sentence"]
+    topic_classification._corpus_labels = ["sci_tech", "business"]
+    topic_classification._corpus_texts = ["Tech sentence", "Business sentence"]
 
     query = np.full(384, -1.0)
     label, _, _ = topic_classification.find_nearest(query)
-    
-    assert label == "finance"
+
+    assert label == "business"

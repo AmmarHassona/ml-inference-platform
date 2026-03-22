@@ -61,20 +61,20 @@ def test_text_predict_returns_expected_fields(client):
 
 def test_text_predict_label_is_known_class(client):
     response = client.post("/predict/text", json={"text": "neural network training"})
-    assert response.json()["label"] in ("machine_learning", "sports", "finance", "health")
+    assert response.json()["label"] in ("world", "sports", "business", "sci_tech")
 
 def test_text_predict_similarity_in_valid_range(client):
     response = client.post("/predict/text", json={"text": "neural network training"})
     similarity = response.json()["similarity"]
     assert 0.0 <= similarity <= 1.0
 
-def test_text_predict_ml_query_returns_ml_label(client):
-    response = client.post("/predict/text", json={"text": "gradient descent optimization neural network"})
-    assert response.json()["label"] == "machine_learning"
+def test_text_predict_tech_query_returns_sci_tech_label(client):
+    response = client.post("/predict/text", json={"text": "software company releases new technology product"})
+    assert response.json()["label"] == "sci_tech"
 
-def test_text_predict_finance_query_returns_finance_label(client):
-    response = client.post("/predict/text", json={"text": "stock market portfolio investment"})
-    assert response.json()["label"] == "finance"
+def test_text_predict_business_query_returns_business_label(client):
+    response = client.post("/predict/text", json={"text": "stock market Wall Street earnings revenue"})
+    assert response.json()["label"] == "business"
 
 def test_text_predict_rejects_missing_body(client):
     response = client.post("/predict/text")

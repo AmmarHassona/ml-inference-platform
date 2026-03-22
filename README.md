@@ -11,9 +11,15 @@ A production-style ML inference platform built to explore ML systems engineering
 
 ---
 
+## Why I Built This
+
+I wanted to understand what happens to models after they're deployed. Most ML courses and tutorials stop at training and messing around with the model in a controlled environment like a Jupyter Notebook for example. This project explores the infrastructure that sits around a model in production such as how drift is detected, how risky deployments are managed safely, and how you observe a system that's making live predictions.
+
+---
+
 ## Architecture Overview
 
-The platform serves two inference endpoints backed by ONNX Runtime. The tabular endpoint (`/predict`) routes requests through a canary router that sends 10% of traffic to a shadow v2 model (GradientBoosting) while the remaining 90% goes to the stable v1 model (RandomForest). Both models run in the same process, loaded at startup. The text endpoint (`/predict/text`) performs topic classification using `sentence-transformers/all-MiniLM-L6-v2` exported to ONNX via HuggingFace Optimum. At startup, a 24-sentence corpus across four topics (machine learning, sports, finance, health) is embedded and stored in memory. Incoming queries are embedded via mean-pooled, L2-normalised inference entirely in NumPy, then matched against the corpus by cosine similarity to return a topic label, confidence score, and matched document. Embeddings are recorded for drift monitoring.
+The platform serves two inference endpoints backed by ONNX Runtime. The tabular endpoint (`/predict`) routes requests through a canary router that sends 10% of traffic to a shadow v2 model (GradientBoosting) while the remaining 90% goes to the stable v1 model (RandomForest). Both models run in the same process, loaded at startup. The text endpoint (`/predict/text`) performs topic classification using `sentence-transformers/all-MiniLM-L6-v2` exported to ONNX via HuggingFace Optimum. At startup, a 60-sentence corpus across four AG News topics (world, sports, business, sci_tech) is embedded and stored in memory. Incoming queries are embedded via mean-pooled, L2-normalised inference entirely in NumPy, then matched against the corpus by cosine similarity to return a topic label, confidence score, and matched document. Embeddings are recorded for drift monitoring.
 
 A background scheduler runs every 60 seconds and does three things: PSI drift detection on a rolling window of tabular features against the training distribution, cosine similarity drift detection on text embeddings against a reference set built from the first 50 requests, and a rollback check that reverts canary traffic if v1/v2 prediction divergence exceeds 15%.
 
@@ -157,19 +163,19 @@ curl -X POST http://localhost:8000/predict \
 
 ### `POST /predict/text`
 
-Semantic search over an in-memory corpus of 24 labelled sentences across four topics: `machine_learning`, `sports`, `finance`, `health`. The query is embedded using MiniLM via mean pooling and L2 normalisation, then matched against the corpus by cosine similarity. Returns the closest topic label, confidence score, and the matched corpus sentence. Embeddings are recorded for drift monitoring. If the distribution of queries shifts (e.g. from ML to finance topics), the embedding drift score rises and an alert fires.
+Topic classification over an in-memory corpus of 60 AG News sentences across four topics: `world`, `sports`, `business`, `sci_tech`. The query is embedded using MiniLM via mean pooling and L2 normalisation, then matched against the corpus by cosine similarity. Returns the closest topic label, confidence score, and the matched corpus sentence. Embeddings are recorded for drift monitoring. If the distribution of queries shifts (e.g. from sports to business topics), the embedding drift score rises and an alert fires.
 
 ```bash
 curl -X POST http://localhost:8000/predict/text \
   -H "Content-Type: application/json" \
-  -d '{"text": "What is gradient descent?"}'
+  -d '{"text": "NASA spacecraft docks with the space station"}'
 ```
 
 ```json
 {
-  "label": "machine_learning",
-  "similarity": 0.8523,
-  "matched_document": "Gradient descent is an optimization algorithm used to train models"
+  "label": "sci_tech",
+  "similarity": 0.7823,
+  "matched_document": "Russian Cargo Craft Docks at Space Station (AP) AP - A Russian cargo ship docked with the International Space Station"
 }
 ```
 
@@ -349,7 +355,7 @@ ml-inference-platform/
 ├── app/
 │   ├── __init__.py
 │   ├── config.py              # All tunable constants (thresholds, window sizes)
-│   ├── corpus.json            # Semantic search corpus (24 sentences across 4 topics)
+│   ├── corpus.json            # AG News corpus (60 sentences across 4 topics: world, sports, business, sci_tech)
 │   ├── logger.py              # structlog configuration and get_logger helper
 │   ├── main.py                # FastAPI app, endpoints, scheduler
 │   ├── metrics.py             # Prometheus metric definitions
