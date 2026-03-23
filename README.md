@@ -1,13 +1,35 @@
 # ML Inference Platform
 
 ![Python](https://img.shields.io/badge/Python-3.10-blue?logo=python&logoColor=white)
-![FastAPI](https://img.shields.io/badge/FastAPI-0.115-009688?logo=fastapi&logoColor=white)
+![FastAPI](https://img.shields.io/badge/FastAPI-0.135-009688?logo=fastapi&logoColor=white)
 ![Docker](https://img.shields.io/badge/Docker-Compose-2496ED?logo=docker&logoColor=white)
 ![Prometheus](https://img.shields.io/badge/Prometheus-monitored-E6522C?logo=prometheus&logoColor=white)
 ![Grafana](https://img.shields.io/badge/Grafana-dashboard-F46800?logo=grafana&logoColor=white)
 ![CI](https://github.com/ammarhassona/ml-inference-platform/actions/workflows/ci.yaml/badge.svg)
+![License](https://img.shields.io/badge/License-MIT-green)
 
 A production-style ML inference platform built to explore ML systems engineering. Two ONNX models are served through a FastAPI app with observability, drift detection, shadow mode testing, canary routing, and automated rollback all running locally via Docker Compose. The tabular models (RandomForest v1, GradientBoosting v2) are trained on the UCI Adult Income dataset to predict whether a person earns >$50K/year. A MiniLM embedder handles text topic classification. The main focus was the infrastructure and pipeline itself rather than the models which is why the models are simple.
+
+---
+
+## Table of Contents
+
+- [Why I Built This](#why-i-built-this)
+- [Architecture Overview](#architecture-overview)
+- [Tech Stack](#tech-stack)
+- [Services](#services)
+- [Quickstart](#quickstart)
+- [API Endpoints](#api-endpoints)
+- [Monitoring and Observability](#monitoring-and-observability)
+- [Structured Logging](#structured-logging)
+- [Drift Detection](#drift-detection)
+- [Shadow Mode and Canary Deployment](#shadow-mode-and-canary-deployment)
+- [Alert Rules](#alert-rules)
+- [Load Test Results](#load-test-results)
+- [Incident Documentation](#incident-documentation)
+- [Project Structure](#project-structure)
+- [CI Pipeline](#ci-pipeline)
+- [What I Would Change](#what-i-would-change)
 
 ---
 
@@ -379,6 +401,9 @@ Loki logs showing PSI drift warnings emitted by the scheduler:
 
 ## Project Structure
 
+<details>
+<summary>Expand project structure tree</summary>
+
 ```
 ml-inference-platform/
 ├── app/
@@ -393,14 +418,15 @@ ml-inference-platform/
 │       ├── drift.py           # PSI computation and feature window
 │       ├── embedding_drift.py # Cosine similarity drift for text
 │       ├── router.py          # Canary routing and rollback logic
-│       ├── topic_classification.py # Corpus embedding, nearest-neighbour topic classification
-│       └── shadow.py          # Shadow v2 inference and divergence tracking
+│       ├── shadow.py          # Shadow v2 inference and divergence tracking
+│       └── topic_classification.py # Corpus embedding, nearest-neighbour topic classification
 ├── docs/                      # Screenshots: load tests, drift incidents, alerts
 ├── grafana/
 │   └── provisioning/
 │       ├── dashboards/        # Auto-provisioned dashboard JSON
 │       └── datasources/       # Auto-provisioned Prometheus and Loki datasources
-├── locust/                    # Load test scenarios
+├── locust/
+│   └── locustfile.py          # Load test scenarios
 ├── model_artifacts/           # ONNX models and reference data (gitignored)
 ├── prometheus/
 │   ├── alert_rules.yml        # 4 alert rules
@@ -408,23 +434,26 @@ ml-inference-platform/
 ├── promtail/
 │   └── promtail.yml           # Promtail config — scrapes Docker logs, ships to Loki
 ├── scripts/
-│   ├── export_model.py        # Train and export tabular models to ONNX
-│   └── export_minilm.py       # Download and export MiniLM to ONNX
+│   ├── build_corpus.py        # One-time script to build AG News corpus from HuggingFace datasets
+│   ├── export_minilm.py       # Download and export MiniLM to ONNX
+│   └── export_model.py        # Train and export tabular models to ONNX
 ├── tests/
-│   ├── test_drift.py           # PSI calculation correctness tests
-│   ├── test_router.py          # Canary rollback boundary condition tests
+│   ├── test_drift.py          # PSI calculation correctness tests
+│   ├── test_drift_injection.py # End-to-end drift injection: reference lock → baseline → OOD shift → threshold breach
 │   ├── test_embedding_drift.py # Embedding reference locking and drift score tests
-│   ├── test_topic_classification.py # Nearest-neighbour topic label classification tests
-│   └── test_drift_injection.py     # End-to-end drift injection: reference lock → baseline → OOD shift → threshold breach
-│   └── test_integration.py    # Integration tests covering all endpoints via TestClient
+│   ├── test_integration.py    # Integration tests covering all endpoints via TestClient
+│   ├── test_router.py         # Canary rollback boundary condition tests
+│   └── test_topic_classification.py # Nearest-neighbour topic label tests
 ├── .github/
 │   └── workflows/
-│       └── ci.yaml                # GitHub Actions CI pipeline
+│       └── ci.yaml            # GitHub Actions CI pipeline
 ├── docker-compose.yml
 ├── Dockerfile
 ├── pyproject.toml
 └── requirements.txt
 ```
+
+</details>
 
 ---
 
