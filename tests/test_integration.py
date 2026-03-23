@@ -17,18 +17,18 @@ def test_health(client):
 # --- /predict ---
 
 def test_predict_returns_expected_fields(client):
-    response = client.post("/predict", json={"features": [5.1, 3.5, 1.4, 0.2]})
+    response = client.post("/predict", json={"features": [39.0, 77516.0, 13.0, 2174.0, 0.0, 40.0]})
     assert response.status_code == 200
     body = response.json()
     assert "prediction" in body
     assert "probabilities" in body
 
 def test_predict_prediction_is_valid_class(client):
-    response = client.post("/predict", json={"features": [5.1, 3.5, 1.4, 0.2]})
-    assert response.json()["prediction"] in (0, 1, 2)
+    response = client.post("/predict", json={"features": [39.0, 77516.0, 13.0, 2174.0, 0.0, 40.0]})
+    assert response.json()["prediction"] in (0, 1)
 
 def test_predict_probabilities_sum_to_one(client):
-    response = client.post("/predict", json={"features": [5.1, 3.5, 1.4, 0.2]})
+    response = client.post("/predict", json={"features": [39.0, 77516.0, 13.0, 2174.0, 0.0, 40.0]})
     total = sum(response.json()["probabilities"])
     assert abs(total - 1.0) < 1e-5
 
@@ -37,7 +37,7 @@ def test_predict_rejects_too_few_features(client):
     assert response.status_code == 422
 
 def test_predict_rejects_too_many_features(client):
-    response = client.post("/predict", json={"features": [1.0, 2.0, 3.0, 4.0, 5.0, 6.0]})
+    response = client.post("/predict", json={"features": [1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0]})
     assert response.status_code == 422
 
 def test_predict_rejects_empty_features(client):

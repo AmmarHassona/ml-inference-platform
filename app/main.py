@@ -1,5 +1,5 @@
 from fastapi import FastAPI, Request, BackgroundTasks
-from pydantic import BaseModel, field_validator
+from pydantic import BaseModel, Field, field_validator
 import onnxruntime as ort
 import numpy as np
 import time
@@ -54,12 +54,14 @@ class InferenceRequest(BaseModel):
     @field_validator("features")
     @classmethod
     def validate_feature_count(cls, v):
-        if len(v) != 4:
-            raise ValueError(f"Expected 4 features (sepal length, sepal width, petal length, petal width), got {len(v)}")
+        if len(v) != 6:
+            raise ValueError(f"Expected 6 features (age, fnlwgt, education_num, capital_gain, capital_loss, hours_per_week), got {len(v)}")
         return v
 
 class TextRequest(BaseModel):
-    text: str
+    text: str = Field(..., max_length=1000)
+
+
 
 @app.get("/health")
 def health():

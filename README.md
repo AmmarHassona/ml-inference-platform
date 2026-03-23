@@ -7,7 +7,7 @@
 ![Grafana](https://img.shields.io/badge/Grafana-dashboard-F46800?logo=grafana&logoColor=white)
 ![CI](https://github.com/ammarhassona/ml-inference-platform/actions/workflows/ci.yaml/badge.svg)
 
-A production-style ML inference platform built to explore ML systems engineering. Two ONNX models are served through a FastAPI app with observability, drift detection, shadow mode testing, canary routing, and automated rollback all running locally via Docker Compose. The models (Iris classifiers using RandomForest + GradientBoosting Classifiers and a MiniLM embedder) are intentionally simple. The main focus was the infrastructure and pipeline itself rather than the models.
+A production-style ML inference platform built to explore ML systems engineering. Two ONNX models are served through a FastAPI app with observability, drift detection, shadow mode testing, canary routing, and automated rollback all running locally via Docker Compose. The tabular models (RandomForest v1, GradientBoosting v2) are trained on the UCI Adult Income dataset to predict whether a person earns >$50K/year. A MiniLM embedder handles text topic classification. The main focus was the infrastructure and pipeline itself rather than the models which is why the models are simple.
 
 ---
 
@@ -95,7 +95,7 @@ uv sync
 
 ### 3. Export models
 
-These scripts train the classifiers on the Iris dataset and export them to ONNX, then download and export MiniLM to ONNX. Run both from the project root. The `model_artifacts/` directory is gitignored and must be populated before starting the stack.
+These scripts train the classifiers on the UCI Adult Income dataset and export them to ONNX, then download and export MiniLM to ONNX. Run both from the project root. The `model_artifacts/` directory is gitignored and must be populated before starting the stack.
 
 ```bash
 python scripts/export_model.py
@@ -105,8 +105,8 @@ python scripts/export_minilm.py
 Expected output from `export_model.py`:
 
 ```
-Random Forest Classifier Accuracy:  1.0
-Gradient Boosting Classifier Accuracy:  1.0
+Random Forest Classifier Accuracy: 0.8098065308629337
+Gradient Boosting Classifier Accuracy: 0.8439963148735797
 ```
 
 `export_minilm.py` will download `sentence-transformers/all-MiniLM-L6-v2` from HuggingFace Hub (~90 MB) on first run.
@@ -144,18 +144,25 @@ curl http://localhost:8000/health
 
 ### `POST /predict`
 
-Tabular inference. Accepts a 4-feature float vector (Iris dataset: sepal length, sepal width, petal length, petal width). Returns the predicted class and per-class probabilities. Each request is also run through the shadow v2 model in the background.
+Tabular inference. Accepts a 6-feature float vector from the UCI Adult Income dataset: `age`, `fnlwgt`, `education_num`, `capital_gain`, `capital_loss`, `hours_per_week`. Returns the predicted income class (0 = ≤$50K, 1 = >$50K) and per-class probabilities. Each request is also run through the shadow v2 model in the background.
+
+The dataset contains an additional 8 features (totalling to 14) which were not used in the models. The reason being that the other features are categorical features and processing and handling them would make the ONNX export more difficult. It would also require to change the API schema to accept mixed types rather than just floats. I did not see a reason to add complexity to the system given that there would not be a significant difference between using just numerical features and just all the features.
+
+Despite the marginal improvement in terms of feature count over the Iris dataset, there are a few benefits over using the UCI Adult Income dataset:
+- The distributions are more realistic
+- ~49K rows vs 150 Iris rows
+- The models do not score 100% accuracy on the dataset meaning features actually have a much higher chance of natural PSI drift
 
 ```bash
 curl -X POST http://localhost:8000/predict \
   -H "Content-Type: application/json" \
-  -d '{"features": [5.1, 3.5, 1.4, 0.2]}'
+  -d '{"features": [39.0, 77516.0, 13.0, 2174.0, 0.0, 40.0]}'
 ```
 
 ```json
 {
   "prediction": 0,
-  "probabilities": [1.0, 0.0, 0.0]
+  "probabilities": [0.82, 0.18]
 }
 ```
 
@@ -169,13 +176,25 @@ Topic classification over an in-memory corpus of 60 AG News sentences across fou
 curl -X POST http://localhost:8000/predict/text \
   -H "Content-Type: application/json" \
   -d '{"text": "NASA spacecraft docks with the space station"}'
+
+curl -X POST http://localhost:8000/predict/text \
+  -H "Content-Type: application/json" \
+  -d '{"text": "Phelps won the 200 freestyle"}'
+
 ```
 
 ```json
 {
   "label": "sci_tech",
-  "similarity": 0.7823,
-  "matched_document": "Russian Cargo Craft Docks at Space Station (AP) AP - A Russian cargo ship docked with the International Space Station"
+  "similarity": 0.6022,
+  "matched_document": "Russian Cargo Craft Docks at Space Station (AP) AP - A Russian cargo ship docked with the international space station Saturday, bringing food, water, fuel and other items to the two-man Russian-American crew, a space official said."
+}
+
+
+{
+  "label": "sports",
+  "similarity": 0.7719,
+  "matched_document": "Phelps, Thorpe Advance in 200 Freestyle (AP) AP - Michael Phelps took care of qualifying for the Olympic 200-meter freestyle semifinals Sunday, and then   found out he had been added to the American team for the evening's 400 freestyle relay final. Phelps' rivals Ian Thorpe and Pieter van den Hoogenband and teammate Klete Keller were faster than the teenager in the 200 free preliminaries."
 }
 ```
 
@@ -297,55 +316,64 @@ The first 50 text requests build a reference embedding set. Subsequent embedding
 | HighP95Latency | `histogram_quantile(0.95, rate(http_request_duration_seconds_bucket[5m])) > 0.2` | 1m | warning |
 | HighErrorRate | `rate(http_requests_total{status="5xx"}[5m]) / rate(http_requests_total[5m]) > 0.05` | 1m | critical |
 
-Alerts were validated by injecting out-of-distribution data and observing Prometheus fire the PSIDrift alert:
+Alerts were validated by injecting out-of-distribution data and observing Prometheus fire the PSIDrift alert. The alert first enters a pending state (threshold breached, waiting out the `for: 1m` duration) before transitioning to firing:
 
-![Fired Alerts](docs/Fired%20Alerts.png)
+![Alert Pending](docs/alert_pending.png)
+![Alert Firing](docs/alert_firing.png)
 
 ---
 
 ## Load Test Results
 
-Load tests were run with Locust. The tabular endpoint reaches sub-10ms P95 latency at 100 concurrent users, the latency actually improves with load.
+Load tests were run with Locust. Zero failures across all concurrency levels. Latency improves from low to medium concurrency as sustained load keeps CPU caches and the ONNX Runtime warm.
 
 ### Tabular endpoint (`/predict`)
 
 | Users | P50 | P95 | P99 | RPS | Failures |
 |-------|-----|-----|-----|-----|----------|
-| 10 | 6ms | 16ms | 25ms | 8.2 | 0% |
-| 50 | 3ms | 10ms | 19ms | 40.3 | 0% |
-| 100 | 3ms | 9ms | 20ms | 78.9 | 0% |
+| 10 | 11ms | 18ms | 26ms | 5.3 | 0% |
+| 50 | 4ms | 16ms | 30ms | 26.2 | 0% |
+| 100 | 4ms | 20ms | 41ms | 53.1 | 0% |
 
-Latency drops at higher concurrency because CPU caches stay warm and connection overhead is shared across more requests.
+![Test 1 — 10 users, 2/s](docs/locust_10_2.png)
+![Test 2 — 50 users, 5/s](docs/locust_50_5.png)
+![Test 3 — 100 users, 10/s](docs/locust_100_10.png)
 
-![Test 1 — 10 users](docs/Test%201.png)
-![Test 2 — 50 users](docs/Test%202.png)
-![Test 3 — 100 users](docs/Test%203.png)
+### Text endpoint (`/predict/text`)
 
-### Combined endpoints — 100 concurrent users
+| Users | P50 | P95 | P99 | RPS | Failures |
+|-------|-----|-----|-----|-----|----------|
+| 10 | 15ms | 29ms | 72ms | 2.7 | 0% |
+| 50 | 9ms | 25ms | 36ms | 13.2 | 0% |
+| 100 | 9ms | 28ms | 50ms | 28.9 | 0% |
 
-| Endpoint | P50 | P95 | P99 | RPS | Failures |
-|----------|-----|-----|-----|-----|----------|
-| `/predict` | 3ms | 13ms | 31ms | 50.6 | 0% |
-| `/predict/text` | 8ms | 20ms | 38ms | 29.2 | 0% |
-| Aggregated | 5ms | 16ms | 33ms | 79.8 | 0% |
+### Aggregated — both endpoints combined
 
-The text endpoint is ~2.5× slower than tabular due to tokenization and the larger MiniLM graph, but well within the 200ms SLO.
+| Users | P50 | P95 | P99 | RPS | Failures |
+|-------|-----|-----|-----|-----|----------|
+| 10 | 13ms | 25ms | 40ms | 8 | 0% |
+| 50 | 6ms | 19ms | 31ms | 39.4 | 0% |
+| 100 | 6ms | 24ms | 44ms | 82 | 0% |
 
-![Combined Test](docs/Combined%20Test.png)
+The text endpoint is ~2× slower than tabular due to tokenization and the larger MiniLM graph, but well within the 200ms SLO. Latency improves from 10 to 50 users because low concurrency leaves gaps between requests, allowing CPU caches and the ONNX Runtime to go partially cold. At 50+ users the sustained load keeps everything warm, and the gains plateau slightly.
+
+Grafana dashboard after all three load tests (~5000 requests total):
+
+![Grafana after Locust](docs/grafana_after_locust.png)
 
 ---
 
 ## Incident Documentation
 
-A simulated data drift incident (out-of-distribution features injected via Locust) and the resulting alert firing are documented in [`docs/`](docs/).
+A simulated data drift incident (out-of-distribution Adult Income features injected directly) as shown in the [Alert Rules](#alert-rules) section
 
-Clean baseline state:
+Grafana dashboard during drift incident — PSI scores elevated across features:
 
-![Clean Data](docs/clean_data.png)
+![Grafana Dashboard](docs/grafana_dashboard.png)
 
-Post-injection drift state:
+Loki logs showing PSI drift warnings emitted by the scheduler:
 
-![Data Drift](docs/data_drift.png)
+![Loki Logs](docs/loki_logs.png)
 
 ---
 
@@ -417,7 +445,7 @@ The pipeline:
 
 ## What I Would Change
 
-The main thing I'd change is the dataset. Iris is convenient for getting the infrastructure off the ground, but models trained on it are too accurate (100% test accuracy) to produce realistic drift or divergence signals. The PSI alerts were triggered by manually injecting noisy data. A dataset with natural distribution shift over time, like credit scoring or sensor data, would make the drift and rollback mechanics far more interesting to watch.
+The tabular models use only the 6 numerical features from the UCI Adult Income dataset, dropping the 8 categorical columns (workclass, occupation, education, etc.) to keep the ONNX export simple. Adding a `ColumnTransformer` with ordinal encoding baked into the sklearn pipeline would let the model use all 14 features and improve accuracy slightly, but would require changing the API to accept a mix of float and string inputs which adds more complexity than it's worth for a single-worker demo.
 
 Redis was initially planned to be implemented but was then removed from the final implementation. The platform uses FastAPI BackgroundTasks for shadow inference and a daemon thread scheduler for periodic drift checks which is sufficient for a single-worker deployment. Redis would become necessary when scaling to multiple API workers, where background tasks can't share in-process state. At that point, Redis would serve as a job queue (via Celery or RQ) to distribute shadow inference and drift computation across workers without race conditions.
 
@@ -425,4 +453,4 @@ The Prometheus alert rules are configured but have no notification channel wired
 
 Grafana uses the default `admin / admin` credentials. This is fine for local development but would be replaced with environment-variable-configured credentials.
 
-The next step in this project for me would be to explore how this pipeline would work with larger models such as LLMs and maybe exploring LLM hallucinations as the drift metric.
+While all previous change are valid, I the next step in this project for me would be to explore how this pipeline would work with larger models such as LLMs and maybe exploring LLM hallucinations as the drift metric.
